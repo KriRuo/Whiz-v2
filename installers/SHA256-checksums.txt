@@ -1,0 +1,24 @@
+# Whiz v1.0.0 SHA256 Checksums
+# Generated on: 2025-01-10
+# Verify downloads using: certutil -hashfile filename SHA256
+
+## Windows Downloads
+Whiz-v1.0.0-Windows-Installer.zip: 58d515b5d56a5a19b02a9a912ed791b3634db3c9c1137879d31100f768a79d98
+Whiz-v1.0.0-Windows-Standalone.exe: 76888eb7654224b3c52a897bbb65ab9f2f5f414e6f98f7ac3a6f95a9ba71dc9e
+
+## macOS Downloads (Coming Soon)
+# Whiz-v1.0.0-macOS.dmg: [checksum will be added after macOS build]
+
+## Linux Downloads (Coming Soon)
+# Whiz-v1.0.0-Linux.AppImage: [checksum will be added after Linux build]
+
+## Verification Instructions
+1. Download the file you want to verify
+2. Run: certutil -hashfile filename SHA256
+3. Compare the output with the checksum above
+4. If they match, the file is authentic and uncorrupted
+
+## Security Notes
+- Always verify checksums before running downloaded executables
+- Only download from official GitHub releases
+- Report any discrepancies immediately

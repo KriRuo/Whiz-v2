@@ -1,0 +1,66 @@
+# Whiz v1.0.0 Release Files - SHA256 Checksums
+
+## Windows Distribution Files
+
+### Installer Package
+Whiz-v1.0.0-Windows-Installer.zip: 9dd5fc922336ac66e96db03d7e21184ce1b8bec8da7ce438ebc000d51c5f1dba
+
+### Standalone Executable
+Whiz-v1.0.0-Windows-Standalone.exe: 74c1ff04265ce0f2894cd3563f45e08f16b6d72245f9917fcd26d62b9dfe5490
+
+## Verification Instructions
+
+### Windows (PowerShell)
+```powershell
+# Verify installer
+certutil -hashfile "Whiz-v1.0.0-Windows-Installer.zip" SHA256
+
+# Verify standalone executable
+certutil -hashfile "Whiz-v1.0.0-Windows-Standalone.exe" SHA256
+```
+
+### Windows (Command Prompt)
+```cmd
+# Verify installer
+certutil -hashfile "Whiz-v1.0.0-Windows-Installer.zip" SHA256
+
+# Verify standalone executable
+certutil -hashfile "Whiz-v1.0.0-Windows-Standalone.exe" SHA256
+```
+
+### Cross-platform (if you have the files)
+```bash
+# Verify installer
+sha256sum "Whiz-v1.0.0-Windows-Installer.zip"
+
+# Verify standalone executable
+sha256sum "Whiz-v1.0.0-Windows-Standalone.exe"
+```
+
+## File Information
+
+### Whiz-v1.0.0-Windows-Installer.zip
+- **Type**: Complete installer package
+- **Contents**: Executable, assets, installation scripts
+- **Size**: ~150 MB
+- **Installation**: Run `install-whiz.bat` as Administrator
+- **Uninstallation**: Use `uninstall-whiz.bat` or Control Panel
+
+### Whiz-v1.0.0-Windows-Standalone.exe
+- **Type**: Standalone executable
+- **Contents**: Self-contained application
+- **Size**: ~150 MB
+- **Installation**: None required
+- **Uninstallation**: Delete file
+
+## Security Notes
+
+- Always verify checksums before running executables
+- Download only from official GitHub releases
+- Be cautious of modified or recompiled versions
+- Report any security concerns via GitHub Issues
+
+---
+
+**Generated**: October 10, 2025  
+**Whiz Development Team**

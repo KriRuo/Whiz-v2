@@ -1,0 +1,18 @@
+QMainWindow { background: #F5F6F8; }
+* { color: #1A1D24; font-family: "Inter","Segoe UI",system-ui,-apple-system; font-size: 13px; }
+
+#TopBar { background: transparent; }
+#AppTitle { font-size: 18px; font-weight: 600; color: #1A1D24; }
+QToolButton { background: rgba(255,255,255,.85); border: 1px solid rgba(0,0,0,.06); border-radius: 8px; padding: 6px; }
+QToolButton:hover { background: rgba(255,255,255,.95); }
+#CloseButton { background: rgba(244,63,94,.16); border-color: rgba(244,63,94,.28); }
+
+#MicCard, #TranscriptExpander { background: rgba(255,255,255,.70); border: 1px solid rgba(0,0,0,.06); border-radius: 20px; }
+#StatusSubtle, #TranscriptTitle { color: #5C6676; font-size: 12px; }
+
+QPushButton { height: 44px; padding: 0 18px; border-radius: 12px; border: 1px solid rgba(0,0,0,.06); background: rgba(0,0,0,.04); font-size: 14px; font-weight: 600; }
+#StartBtn { background: qlineargradient(x1:0,y1:0,x2:1,y2:1, stop:0 rgba(59,130,246,.30), stop:1 rgba(34,211,238,.30)); border-color: rgba(59,130,246,.40); }
+
+#TranscriptPreview { background: transparent; border: none; }
+
+

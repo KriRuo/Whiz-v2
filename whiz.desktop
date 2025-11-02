@@ -1,0 +1,12 @@
+[Desktop Entry]
+Name=Whiz Voice-to-Text
+Comment=AI-powered voice transcription application
+Exec=/usr/local/bin/whiz
+Icon=/usr/local/share/icons/hicolor/256x256/apps/whiz.png
+Terminal=false
+Type=Application
+Categories=Utility;Audio;AudioVideo;
+Keywords=voice;text;transcription;speech;recognition;
+StartupNotify=true
+MimeType=
+Version=1.0
