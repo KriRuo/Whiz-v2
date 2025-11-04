@@ -475,15 +475,11 @@ class SpeechApp(MainWindow):
                 print("SpeechApp: Actually quitting, cleaning up controller...")
                 self.controller.cleanup()
                 
-                # Clean up single instance lock
-                if hasattr(self, 'single_instance_manager') and self.single_instance_manager:
-                    try:
-                        self.single_instance_manager.release_lock()
-                        logger.info("Single instance lock released on window close")
-                    except Exception as e:
-                        logger.error(f"Error releasing single instance lock on close: {e}")
+                # Single instance lock cleanup is handled by CleanupManager
+                # No need to manually release lock here
             else:
                 print("SpeechApp: Minimizing to tray or event ignored, skipping controller cleanup...")
+                # Note: Single instance lock should NOT be released when minimizing to tray
             
         except Exception as e:
             logger.error(f"Error during application close: {e}")

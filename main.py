@@ -121,6 +121,17 @@ def main():
         logger.info("Initializing settings manager...")
         settings_manager = SettingsManager()
         
+        # Register single instance cleanup with CleanupManager
+        from core.cleanup_manager import register_cleanup_task, CleanupPhase
+        register_cleanup_task(
+            "single_instance_lock_cleanup",
+            CleanupPhase.SYSTEM_RESOURCES,
+            single_instance.cleanup_for_manager,
+            timeout=5.0,
+            critical=False  # Non-critical - atexit/signal handlers will handle it
+        )
+        logger.info("Single instance cleanup registered with CleanupManager")
+        
         # Initialize the speech controller with settings
         logger.info("Initializing Speech-to-Text Tool...")
         settings = settings_manager.load_all()
@@ -183,11 +194,8 @@ def main():
         # Start the event loop
         result = app.exec_()
         
-        # Clean up single instance lock
-        try:
-            single_instance.release_lock()
-        except Exception as e:
-            logger.error(f"Error releasing single instance lock: {e}")
+        # Cleanup is handled by CleanupManager and signal handlers
+        # No need to manually release lock here
         
         return result
         
@@ -196,12 +204,8 @@ def main():
         logger.error("DEPENDENCY ERROR - Required packages are missing.")
         logger.error("To fix this: Run python setup_and_run.py or install manually: pip install -r requirements.txt")
         
-        # Clean up single instance lock if it was acquired
-        try:
-            if 'single_instance' in locals():
-                single_instance.release_lock()
-        except Exception:
-            pass
+        # Cleanup is handled by signal handlers and atexit
+        # No need to manually release lock here
         
         # Show user-friendly error dialog
         QMessageBox.critical(
@@ -218,12 +222,8 @@ def main():
         logger.error(f"Unexpected error: {e}")
         logger.error(traceback.format_exc())
         
-        # Clean up single instance lock if it was acquired
-        try:
-            if 'single_instance' in locals():
-                single_instance.release_lock()
-        except Exception:
-            pass
+        # Cleanup is handled by signal handlers and atexit
+        # No need to manually release lock here
         
         # Show error dialog with helpful information
         error_msg = QMessageBox()

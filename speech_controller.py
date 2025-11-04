@@ -289,7 +289,10 @@ class SpeechController:
         """
         if timeout_seconds is None:
             timeout_seconds = TIMEOUT_CONFIG.MODEL_LOADING_TIMEOUT
-        with self._model_condition:
+        
+        self._model_condition.acquire()
+        lock_released = False  # Track if lock has been released
+        try:
             # If model is already loaded, return immediately
             if self.model_loaded:
                 return True
@@ -328,14 +331,27 @@ class SpeechController:
             
             # Release the lock while loading (this is safe because we check model_loading)
             self._model_condition.release()
+            lock_released = True  # Mark that we've released the lock
             
+        except Exception:
+            # If any error occurs in the locked section, release before re-raising
+            if not lock_released:
+                self._model_condition.release()
+                lock_released = True
+            raise
+        finally:
+            # Ensure lock is released on all code paths (early returns, exceptions, etc.)
+            if not lock_released:
+                self._model_condition.release()
+        
+        # Now we're outside the lock, load the model
+        try:
+            # Load the model with comprehensive error handling
+            success = self._load_model_implementation()
+            
+            # Re-acquire lock to update state
+            self._model_condition.acquire()
             try:
-                # Load the model with comprehensive error handling
-                success = self._load_model_implementation()
-                
-                # Re-acquire lock to update state
-                self._model_condition.acquire()
-                
                 if success:
                     self.model_loaded = True
                     self.model_load_error = None
@@ -352,11 +368,13 @@ class SpeechController:
                 self._model_condition.notify_all()
                 
                 return success
+            finally:
+                self._model_condition.release()
                 
-            except Exception as e:
-                # Re-acquire lock to update state
-                self._model_condition.acquire()
-                
+        except Exception as e:
+            # Re-acquire lock to update state
+            self._model_condition.acquire()
+            try:
                 self.model_loading = False
                 self.model_load_error = f"Unexpected error: {e}"
                 logger.error(f"Unexpected error loading Whisper model: {e}")
@@ -367,13 +385,7 @@ class SpeechController:
                 
                 return False
             finally:
-                # Ensure we always release the condition lock
-                try:
-                    if hasattr(self._model_condition, '_lock') and self._model_condition._lock.locked():
-                        self._model_condition.release()
-                except (RuntimeError, AttributeError):
-                    # Already released or no lock attribute, ignore
-                    pass
+                self._model_condition.release()
     
     @with_retry("model_loading")
     def _load_model_implementation(self) -> bool:

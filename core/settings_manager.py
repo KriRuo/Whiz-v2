@@ -57,8 +57,16 @@ class SettingsManager:
             default = SETTINGS_SCHEMA.get_default_value(key)
         
         try:
-            # Get raw value from QSettings
-            raw_value = self.settings.value(key, default)
+            # First check the loaded settings cache
+            if key in self._loaded_settings:
+                raw_value = self._loaded_settings[key]
+            else:
+                # Fall back to QSettings if not in cache
+                raw_value = self.settings.value(key, default)
+            
+            # If still no value, use default
+            if raw_value is None:
+                raw_value = default
             
             # Validate using schema
             if key in SETTINGS_SCHEMA.schema:
@@ -67,21 +75,25 @@ class SettingsManager:
                     return validated_value
                 except ValueError as e:
                     logger.warning(f"Setting '{key}' validation failed: {e}, using default")
-                    return default
+                    return default if default is not None else SETTINGS_SCHEMA.get_default_value(key)
             else:
-                return raw_value
+                return raw_value if raw_value is not None else default
                 
         except Exception as e:
             logger.error(f"Error getting setting '{key}': {e}")
-            return default
+            return default if default is not None else SETTINGS_SCHEMA.get_default_value(key)
     
-    def set(self, key: str, value: Any) -> None:
+    def set(self, key: str, value: Any, _use_default_on_error: bool = False) -> None:
         """
         Set a setting value with validation.
         
         Args:
             key: Setting key (e.g., 'ui/theme')
             value: Value to set
+            _use_default_on_error: Internal flag to prevent infinite recursion when using defaults
+            
+        Raises:
+            ValueError: If validation fails and no default is available, or if default also fails validation
         """
         try:
             # Validate the value using schema
@@ -102,6 +114,28 @@ class SettingsManager:
             
             logger.debug(f"Setting '{key}' set to '{validated_value}'")
             
+        except ValueError as e:
+            # For validation errors, try to use the default value instead of raising
+            # But only if we're not already trying to use a default (prevents infinite recursion)
+            if _use_default_on_error:
+                # Already using default, and it also failed - raise the error
+                logger.error(f"Setting '{key}' default value also failed validation: {e}")
+                raise ValueError(f"Setting '{key}' validation failed and default value is also invalid: {e}")
+            
+            logger.warning(f"Setting '{key}' validation failed: {e}, attempting to use default")
+            default_value = SETTINGS_SCHEMA.get_default_value(key) if key in SETTINGS_SCHEMA.schema else None
+            if default_value is not None:
+                # Recursively set with default value, but mark that we're using a default
+                try:
+                    self.set(key, default_value, _use_default_on_error=True)
+                except ValueError:
+                    # Default also failed validation - raise error
+                    logger.error(f"Setting '{key}' default value '{default_value}' also failed validation")
+                    raise ValueError(f"Setting '{key}' validation failed: {e}. Default value '{default_value}' also invalid.")
+            else:
+                # No default available - raise error instead of silently failing
+                logger.error(f"No default value available for '{key}' and validation failed: {e}")
+                raise ValueError(f"Setting '{key}' validation failed: {e}. No default value available.")
         except Exception as e:
             logger.error(f"Error setting '{key}' to '{value}': {e}")
             raise

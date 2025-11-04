@@ -435,7 +435,17 @@ class SettingsSchema:
                 if isinstance(value, bool):
                     return value
                 elif isinstance(value, str):
-                    return value.lower() in ('true', '1', 'yes', 'on')
+                    lower_val = value.lower().strip()
+                    # Empty string is not a valid boolean value - should trigger default fallback
+                    if not lower_val:
+                        raise ValueError(f"Invalid boolean value: '{value}'. Must be one of: true, false, 1, 0, yes, no, on, off")
+                    if lower_val in ('true', '1', 'yes', 'on'):
+                        return True
+                    elif lower_val in ('false', '0', 'no', 'off'):
+                        return False
+                    else:
+                        # Invalid boolean string - raise error to use default
+                        raise ValueError(f"Invalid boolean value: '{value}'. Must be one of: true, false, 1, 0, yes, no, on, off")
                 else:
                     return bool(value)
             elif schema.type == SettingType.ENUM:
@@ -475,19 +485,27 @@ class SettingsSchema:
         if not isinstance(value, str) or not value.strip():
             raise ValueError("Hotkey cannot be empty")
         
-        # Basic hotkey validation
-        parts = [part.strip().lower() for part in value.split('+')]
+        # Normalize whitespace: strip and collapse multiple spaces
+        normalized = ' '.join(value.strip().split())
+        
+        # Split into parts for validation (preserve original case for return)
+        original_parts = [part.strip() for part in normalized.split('+')]
+        
+        # Basic hotkey validation - normalize to lowercase for validation
+        parts_lower = [part.lower() for part in original_parts]
         valid_modifiers = ['ctrl', 'alt', 'shift', 'cmd', 'win', 'alt gr']
         valid_keys = ['f1', 'f2', 'f3', 'f4', 'f5', 'f6', 'f7', 'f8', 'f9', 'f10', 'f11', 'f12',
                      'caps lock', 'space', 'enter', 'tab', 'escape', 'esc', 'backspace', 'delete',
                      'home', 'end', 'page up', 'page down', 'insert', 'print screen', 'scroll lock',
                      'pause', 'break', 'num lock', 'menu', 'left', 'right', 'up', 'down']
         
-        for part in parts:
-            if part not in valid_modifiers and part not in valid_keys and not part.isalnum():
-                raise ValueError(f"Invalid hotkey component: {part}")
+        for part_lower in parts_lower:
+            if part_lower not in valid_modifiers and part_lower not in valid_keys and not part_lower.isalnum():
+                raise ValueError(f"Invalid hotkey component: {part_lower}")
         
-        return value
+        # Return normalized (whitespace normalized, case preserved) value
+        # Join original parts back together with '+' separator
+        return '+'.join(original_parts)
     
     def _validate_hotkey_mode(self, value: str) -> str:
         """Validate hotkey mode"""

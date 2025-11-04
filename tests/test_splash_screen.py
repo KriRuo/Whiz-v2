@@ -239,7 +239,7 @@ class TestSplashScreenIntegration(unittest.TestCase):
     @patch('core.platform_features.PlatformFeatures')
     @patch('core.audio_manager.AudioManager')
     @patch('core.hotkey_manager.HotkeyManager')
-    @patch('splash_screen.SpeechController')
+    @patch('speech_controller.SpeechController')
     def test_splash_to_main_window_handoff(self, mock_controller, mock_hotkey,
                                          mock_audio, mock_features, mock_settings,
                                          mock_speech_app):

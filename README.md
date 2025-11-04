@@ -136,8 +136,8 @@ DEFAULTS = {
    - **Important**: Check "Add Python to PATH" during installation
 
 2. **Run the Application**
-   - Double-click `launch-whiz.bat` (uses optimized splash screen for fast startup)
-   - Or double-click `launch-whiz-splash.bat` (with minimized console)
+   - Double-click `scripts/launch/launch-whiz.bat` (uses optimized splash screen for fast startup)
+   - Or double-click `scripts/launch/launch-whiz-splash.bat` (with minimized console)
    - The setup will handle everything automatically
 
 ### For Developers
@@ -152,10 +152,9 @@ python main.py
 
 ### Alternative Launch Methods
 
-- **Silent Launch**: Double-click `Whiz-Launcher-Silent.bat` (no console window)
-- **Splash Screen**: Run `python main_with_splash.py` or `python main_with_splash_fixed.py`
-- **Simple Splash**: Run `python simple_splash_launcher.py`
-- **Manual Setup**: Run `python setup_and_run.py`
+- **Silent Launch**: Double-click `scripts/launch/launch-whiz.vbs` (no console window)
+- **Splash Screen**: Run `python main_with_splash.py`
+- **Manual Setup**: Run `python scripts/tools/setup_and_run.py`
 - **Direct Launch**: Run `python main.py`
 
 ### Using the Application
@@ -255,13 +254,15 @@ torch>=2.0.0,<2.2.0  # CPU-only version for compatibility
 The application includes comprehensive unit tests for the settings system:
 
 ```bash
-# Run tests
-python -m pytest tests/test_settings_manager.py -v
+# Run all tests
+python scripts/tools/run_tests.py
+
+# Or use pytest directly
+python -m pytest tests/ -v
 
 # Run specific test categories
-python -m pytest tests/test_settings_manager.py::TestSettingsSchema -v
-python -m pytest tests/test_settings_manager.py::TestSettingsManager -v
-python -m pytest tests/test_settings_manager.py::TestSettingsIntegration -v
+python -m pytest tests/unit/test_settings_manager.py -v
+python -m pytest tests/integration/ -v
 ```
 
 ## Troubleshooting
@@ -276,7 +277,7 @@ python -m pytest tests/test_settings_manager.py::TestSettingsIntegration -v
 #### "Installation failed"
 - Check your internet connection
 - Try running as administrator
-- Run `python setup_and_run.py` manually
+- Run `python scripts/tools/setup_and_run.py` manually
 
 #### Audio Device Not Found
 - Ensure your microphone is connected and working
@@ -313,23 +314,40 @@ python -m pytest tests/test_settings_manager.py::TestSettingsIntegration -v
 Whiz/
 ├── core/                    # Core functionality
 │   ├── settings_manager.py  # Settings persistence
-│   └── settings_schema.py  # Settings validation
-├── ui/                     # User interface
-│   ├── main_window.py      # Main window management
-│   ├── record_tab.py       # Recording interface
-│   ├── transcripts_tab.py  # Transcript history
+│   ├── settings_schema.py   # Settings validation
+│   ├── audio_manager.py     # Audio handling
+│   ├── hotkey_manager.py    # Global hotkey support
+│   └── ...                  # Other core modules
+├── ui/                      # User interface
+│   ├── main_window.py       # Main window management
+│   ├── record_tab.py        # Recording interface
+│   ├── transcripts_tab.py   # Transcript history
 │   ├── preferences_dialog.py # Settings UI
-│   ├── custom_titlebar.py  # Custom window controls
-│   ├── styles/            # Modern styling system
-│   │   └── main_styles.py # Wispr Flow inspired styles
-│   └── components/         # Reusable UI components
-├── tests/                  # Unit tests
-├── assets/                 # Audio files
-├── main.py                 # Direct application entry point
-├── main_with_splash.py     # Splash screen version
-├── speech_ui.py           # Main GUI
-├── speech_controller.py   # Core logic
-└── waveform_widget.py    # Audio visualization with neon effects
+│   ├── custom_titlebar.py   # Custom window controls
+│   ├── styles/              # Modern styling system
+│   │   └── main_styles.py   # Wispr Flow inspired styles
+│   └── components/          # Reusable UI components
+├── tests/                   # Test suite
+│   ├── unit/                # Unit tests
+│   ├── integration/         # Integration tests
+│   └── verification/        # Verification scripts
+├── scripts/                 # Utility scripts
+│   ├── launch/              # Launch scripts (.bat, .ps1, .vbs, .sh)
+│   ├── build/               # Build scripts
+│   └── tools/               # Utility scripts (test runners, setup, etc.)
+├── assets/                  # Resources
+│   ├── images/              # Images and icons
+│   │   └── icons/           # Application icons
+│   └── sounds/              # Audio files
+├── docs/                    # Documentation
+│   ├── architecture/        # Architecture documentation
+│   ├── guides/              # User guides
+│   └── release/             # Release notes
+├── main.py                  # Direct application entry point
+├── main_with_splash.py      # Splash screen version
+├── speech_ui.py            # Main GUI
+├── speech_controller.py     # Core logic
+└── waveform_widget.py      # Audio visualization with neon effects
 ```
 
 ### Contributing

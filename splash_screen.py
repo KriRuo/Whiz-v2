@@ -549,13 +549,8 @@ class SplashScreen(QWidget):
     def closeEvent(self, event):
         """Handle splash screen close event"""
         try:
-            # Release single instance lock if we have it
-            if hasattr(self, 'single_instance_manager') and self.single_instance_manager:
-                try:
-                    self.single_instance_manager.release_lock()
-                    logger.info("Single instance lock released on splash screen close")
-                except Exception as e:
-                    logger.error(f"Error releasing single instance lock on splash close: {e}")
+            # Single instance lock cleanup is handled by CleanupManager
+            # No need to manually release lock here
             
             # Clean up worker thread
             if hasattr(self, 'worker') and self.worker.isRunning():

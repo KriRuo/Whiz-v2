@@ -143,6 +143,17 @@ def main():
         # Set application style
         app.setStyle('Fusion')
         
+        # Register single instance cleanup with CleanupManager
+        from core.cleanup_manager import register_cleanup_task, CleanupPhase
+        register_cleanup_task(
+            "single_instance_lock_cleanup",
+            CleanupPhase.SYSTEM_RESOURCES,
+            single_instance.cleanup_for_manager,
+            timeout=5.0,
+            critical=False  # Non-critical - atexit/signal handlers will handle it
+        )
+        logger.info("Single instance cleanup registered with CleanupManager")
+        
         logger.info("Creating splash screen...")
         
         # Create splash screen
@@ -171,12 +182,8 @@ def main():
         print("2. Or install manually: pip install -r requirements.txt")
         print("\nIf you're a new user, just run launch-whiz.bat")
         
-        # Clean up single instance lock if we have it
-        try:
-            if 'single_instance' in locals():
-                single_instance.release_lock()
-        except Exception:
-            pass
+        # Cleanup is handled by signal handlers and atexit
+        # No need to manually release lock here
         
         # Show user-friendly error dialog
         try:
@@ -199,12 +206,8 @@ def main():
         print(error_msg)
         traceback.print_exc()
         
-        # Clean up single instance lock if we have it
-        try:
-            if 'single_instance' in locals():
-                single_instance.release_lock()
-        except Exception:
-            pass
+        # Cleanup is handled by signal handlers and atexit
+        # No need to manually release lock here
         
         # Show error dialog with helpful information
         try:
