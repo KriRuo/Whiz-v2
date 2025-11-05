@@ -13,6 +13,7 @@ from speech_controller import SpeechController
 from speech_ui import SpeechApp
 from core.settings_manager import SettingsManager
 from core.logging_config import initialize_logging, get_logger
+from core.platform_utils import PlatformUtils
 
 def main():
     """Main application entry point"""
@@ -167,7 +168,8 @@ def main():
                 
                 # Load the icon
                 user32 = ctypes.windll.user32
-                abs_icon_path = os.path.abspath("app_icon_transparent.ico")
+                icon_path_obj = PlatformUtils.get_resource_path("assets/images/icons/app_icon_transparent.ico")
+                abs_icon_path = str(icon_path_obj)
                 
                 hicon = user32.LoadImageW(
                     None, abs_icon_path, 1, 0, 0, 0x00000010
@@ -214,7 +216,8 @@ def main():
             f"Required packages are missing: {e}\n\n"
             "Please run the setup script:\n"
             "python setup_and_run.py\n\n"
-            "Or double-click start_whiz.bat"
+            "Or install manually:\n"
+            "pip install -r requirements.txt"
         )
         return 1
         

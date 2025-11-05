@@ -3,7 +3,7 @@ Animated Circle Component for Whiz Voice-to-Text Application
 Custom QWidget with soft neon glow aura and pulsing effects.
 """
 
-from PyQt5.QtWidgets import QWidget, QVBoxLayout, QLabel
+from PyQt5.QtWidgets import QWidget, QVBoxLayout, QLabel, QApplication
 from PyQt5.QtCore import Qt, QTimer, QPropertyAnimation, pyqtProperty, QRectF, QEasingCurve
 from PyQt5.QtGui import QPainter, QPen, QBrush, QRadialGradient, QConicalGradient, QLinearGradient, QColor, QFont
 from PyQt5.QtSvg import QSvgRenderer

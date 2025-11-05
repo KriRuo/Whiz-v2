@@ -423,8 +423,13 @@ class SingleInstanceManager:
     def _activate_window_windows(self) -> bool:
         """Activate window on Windows using win32gui."""
         try:
-            import win32gui
-            import win32con
+            # Conditional import - only available on Windows
+            try:
+                import win32gui
+                import win32con
+            except ImportError:
+                logger.warning("win32gui not available, cannot activate window on Windows")
+                return False
             
             def enum_windows_callback(hwnd, windows):
                 if win32gui.IsWindowVisible(hwnd):
@@ -451,9 +456,6 @@ class SingleInstanceManager:
                 logger.warning("No Whiz window found on Windows")
                 return False
                 
-        except ImportError:
-            logger.warning("win32gui not available, cannot activate window on Windows")
-            return False
         except Exception as e:
             logger.error(f"Error activating Windows window: {e}")
             return False

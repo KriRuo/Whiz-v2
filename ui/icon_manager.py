@@ -6,12 +6,28 @@ Handles Windows-specific icon setting and provides centralized icon management.
 import os
 import sys
 from PyQt5.QtGui import QIcon
+from core.platform_utils import PlatformUtils
+
+
+class _IconPathDescriptor:
+    """Descriptor for lazy-loading icon path"""
+    def __get__(self, obj, cls):
+        if cls._icon_path is None:
+            icon_path_obj = PlatformUtils.get_resource_path("assets/images/icons/app_icon_transparent.ico")
+            cls._icon_path = str(icon_path_obj)
+        return cls._icon_path
 
 
 class IconManager:
     """Manages application icons across different contexts"""
     
-    ICON_PATH = "app_icon_transparent.ico"
+    _icon_path = None
+    ICON_PATH = _IconPathDescriptor()
+    
+    @staticmethod
+    def _get_icon_path() -> str:
+        """Get the icon path using PlatformUtils for proper resource resolution."""
+        return IconManager.ICON_PATH
     
     @staticmethod
     def set_windows_icon(icon_path: str) -> bool:
@@ -55,7 +71,8 @@ class IconManager:
     @staticmethod
     def get_app_icon() -> QIcon:
         """Get the application icon"""
-        if os.path.exists(IconManager.ICON_PATH):
-            return QIcon(IconManager.ICON_PATH)
+        icon_path = IconManager._get_icon_path()
+        if os.path.exists(icon_path):
+            return QIcon(icon_path)
         else:
             return QIcon()

@@ -193,7 +193,8 @@ def main():
                 f"Required packages are missing: {e}\n\n"
                 "Please run the setup script:\n"
                 "python setup_and_run.py\n\n"
-                "Or double-click launch-whiz.bat"
+                "Or install manually:\n"
+                "pip install -r requirements.txt"
             )
         except:
             pass  # If Qt isn't available, just print the error

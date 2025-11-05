@@ -154,7 +154,7 @@ class MainWindow(QMainWindow):
         if hasattr(self.tab_widget, 'tabBar'):
             self.tab_widget.tabBar().setElideMode(Qt.ElideNone)
         
-        # Initialize system tray if on Windows
+        # Initialize system tray if available
         self.init_system_tray()
         
         # Connect screen change detection for multi-monitor setups
@@ -414,8 +414,8 @@ class MainWindow(QMainWindow):
             self.sound_end.play()
     
     def init_system_tray(self):
-        """Initialize the system tray icon (Windows only)."""
-        if PlatformUtils.is_windows() and QSystemTrayIcon.isSystemTrayAvailable():
+        """Initialize the system tray icon (cross-platform)."""
+        if QSystemTrayIcon.isSystemTrayAvailable():
             try:
                 self.system_tray = SystemTrayIcon(self)
                 
@@ -438,7 +438,7 @@ class MainWindow(QMainWindow):
                 # Set system tray availability to False
                 self.settings_manager.set("behavior/system_tray_available", False)
         else:
-            print("System tray not available - not on Windows or tray not supported")
+            print("System tray not available on this platform")
             self.system_tray = None
             # Set system tray availability to False
             self.settings_manager.set("behavior/system_tray_available", False)

@@ -1,6 +1,6 @@
 """
 System tray icon implementation for Whiz Voice-to-Text application.
-Provides Windows system tray functionality with context menu and window control.
+Provides cross-platform system tray functionality with context menu and window control.
 """
 
 import os
@@ -20,7 +20,7 @@ class SystemTrayIcon(QSystemTrayIcon):
     - Show/Hide main window
     - Quit application
     
-    Only activates on Windows platform.
+    Works on Windows, Linux, and macOS platforms where system tray is available.
     """
     
     # Signals emitted by the tray icon
@@ -39,13 +39,14 @@ class SystemTrayIcon(QSystemTrayIcon):
         """
         super().__init__(parent)
         
-        # Only create tray icon on Windows
-        if not PlatformUtils.is_windows():
+        # Check if system tray is available on this platform
+        if not QSystemTrayIcon.isSystemTrayAvailable():
             return
         
         # Set up icon
         if icon_path is None:
-            icon_path = "app_icon_transparent.ico"
+            icon_path_obj = PlatformUtils.get_resource_path("assets/images/icons/app_icon_transparent.ico")
+            icon_path = str(icon_path_obj)
 
         if icon_path and os.path.exists(icon_path):
             self.setIcon(QIcon(icon_path))
@@ -137,11 +138,12 @@ class SystemTrayIcon(QSystemTrayIcon):
             icon: Message icon type
             timeout: Display timeout in milliseconds
         """
-        if PlatformUtils.is_windows():
+        # System tray messages work on all platforms where tray is available
+        if QSystemTrayIcon.isSystemTrayAvailable():
             self.showMessage(title, message, icon, timeout)
     
     def cleanup(self):
         """Clean up the tray icon."""
-        if PlatformUtils.is_windows():
+        if QSystemTrayIcon.isSystemTrayAvailable():
             self.hide()
             self.deleteLater()

@@ -7,6 +7,7 @@ from ui.layout_system import DPIScalingHelper, ResponsiveBreakpoints, ScreenSize
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QLabel, QApplication, QSizePolicy
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QPixmap, QCursor
+from core.platform_utils import PlatformUtils
 
 class VisualIndicatorWidget(QWidget):
     """A floating widget that shows recording status"""
@@ -84,7 +85,8 @@ class VisualIndicatorWidget(QWidget):
     def _load_responsive_icon(self):
         """Load icon with responsive scaling."""
         try:
-            icon_path = "Icon_Listening.png"
+            icon_path_obj = PlatformUtils.get_resource_path("assets/images/Icon_Listening.png")
+            icon_path = str(icon_path_obj)
             pixmap = QPixmap(icon_path)
             if not pixmap.isNull():
                 # Calculate responsive icon size

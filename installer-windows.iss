@@ -20,7 +20,7 @@ AllowNoIcons=yes
 ; Output
 OutputDir=installers
 OutputBaseFilename=Whiz-Setup-Windows
-SetupIconFile=app_icon_transparent.ico
+SetupIconFile=assets/images/icons/app_icon_transparent.ico
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
@@ -30,8 +30,10 @@ PrivilegesRequired=lowest
 MinVersion=10.0.17763
 
 ; Appearance
-WizardImageFile=app_icon_transparent.bmp
-WizardSmallImageFile=app_icon_transparent.bmp
+; Note: WizardImageFile and WizardSmallImageFile typically require BMP format
+; If BMP versions are needed, they should be created from the ICO file
+; WizardImageFile=assets/images/icons/app_icon_transparent.bmp
+; WizardSmallImageFile=assets/images/icons/app_icon_transparent.bmp
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
@@ -47,11 +49,12 @@ Source: "dist\Whiz.exe"; DestDir: "{app}"; Flags: ignoreversion
 ; Assets folder
 Source: "assets\*"; DestDir: "{app}\assets"; Flags: ignoreversion recursesubdirs createallsubdirs
 
-; Icons
-Source: "app_icon_transparent.ico"; DestDir: "{app}"; Flags: ignoreversion
-Source: "speech_to_text_icon_transparent_middle_white.ico"; DestDir: "{app}"; Flags: ignoreversion
-Source: "Icon_Listening.png"; DestDir: "{app}"; Flags: ignoreversion
-Source: "Icon_Transcribing.png"; DestDir: "{app}"; Flags: ignoreversion
+; Note: Individual icon files are already included in assets folder above
+; These lines are kept for reference but may be redundant
+; Source: "assets\images\icons\app_icon_transparent.ico"; DestDir: "{app}"; Flags: ignoreversion
+; Source: "assets\images\icons\speech_to_text_icon_transparent_middle_white.ico"; DestDir: "{app}"; Flags: ignoreversion
+; Source: "assets\images\Icon_Listening.png"; DestDir: "{app}"; Flags: ignoreversion
+; Source: "assets\images\Icon_Transcribing.png"; DestDir: "{app}"; Flags: ignoreversion
 
 ; Documentation
 Source: "README.md"; DestDir: "{app}"; Flags: ignoreversion
@@ -59,14 +62,14 @@ Source: "QUICK_START.md"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 ; Start Menu
-Name: "{group}\Whiz Voice-to-Text"; Filename: "{app}\Whiz.exe"; IconFilename: "{app}\app_icon_transparent.ico"
+Name: "{group}\Whiz Voice-to-Text"; Filename: "{app}\Whiz.exe"; IconFilename: "{app}\assets\images\icons\app_icon_transparent.ico"
 Name: "{group}\{cm:UninstallProgram,Whiz Voice-to-Text}"; Filename: "{uninstallexe}"
 
 ; Desktop (optional)
-Name: "{autodesktop}\Whiz Voice-to-Text"; Filename: "{app}\Whiz.exe"; IconFilename: "{app}\app_icon_transparent.ico"; Tasks: desktopicon
+Name: "{autodesktop}\Whiz Voice-to-Text"; Filename: "{app}\Whiz.exe"; IconFilename: "{app}\assets\images\icons\app_icon_transparent.ico"; Tasks: desktopicon
 
 ; Quick Launch (optional)
-Name: "{userappdata}\Microsoft\Internet Explorer\Quick Launch\Whiz Voice-to-Text"; Filename: "{app}\Whiz.exe"; IconFilename: "{app}\app_icon_transparent.ico"; Tasks: quicklaunchicon
+Name: "{userappdata}\Microsoft\Internet Explorer\Quick Launch\Whiz Voice-to-Text"; Filename: "{app}\Whiz.exe"; IconFilename: "{app}\assets\images\icons\app_icon_transparent.ico"; Tasks: quicklaunchicon
 
 [Run]
 ; Launch after installation

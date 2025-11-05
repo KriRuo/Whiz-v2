@@ -246,8 +246,30 @@ class PlatformUtils:
             # macOS: ~/Desktop
             desktop_dir = Path.home() / 'Desktop'
         elif platform_type == PlatformType.LINUX:
-            # Linux: ~/Desktop
-            desktop_dir = Path.home() / 'Desktop'
+            # Linux: Use XDG directory standards, fallback to ~/Desktop
+            # Check XDG_DESKTOP_DIR environment variable first
+            xdg_desktop = os.environ.get('XDG_DESKTOP_DIR')
+            if xdg_desktop:
+                desktop_dir = Path(xdg_desktop)
+            else:
+                # Fallback to standard locations
+                desktop_dir = Path.home() / 'Desktop'
+                # If Desktop doesn't exist, try XDG user directories
+                if not desktop_dir.exists():
+                    xdg_config_home = Path(os.environ.get('XDG_CONFIG_HOME', Path.home() / '.config'))
+                    user_dirs_file = xdg_config_home / 'user-dirs.dirs'
+                    if user_dirs_file.exists():
+                        try:
+                            with open(user_dirs_file, 'r', encoding='utf-8') as f:
+                                for line in f:
+                                    if line.startswith('XDG_DESKTOP_DIR='):
+                                        dir_path = line.split('=', 1)[1].strip().strip('"')
+                                        # Replace $HOME with actual home directory
+                                        dir_path = dir_path.replace('$HOME', str(Path.home()))
+                                        desktop_dir = Path(dir_path)
+                                        break
+                        except Exception:
+                            pass  # Fallback to ~/Desktop
         else:
             # Fallback: home directory
             desktop_dir = Path.home()
