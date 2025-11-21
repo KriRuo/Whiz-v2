@@ -1,5 +1,6 @@
 # Python virtual environment
 whiz_env/
+whiz_env_311/
 venv/
 env/
 ENV/

@@ -105,8 +105,8 @@ class MainWindow(QMainWindow):
         self.content_layout = LayoutBuilder.create_main_layout(
             self.content_widget,
             spacing=LayoutTokens.SPACING_LG,
-            margins=(LayoutTokens.MARGIN_SM, LayoutTokens.MARGIN_XL, 
-                    LayoutTokens.MARGIN_XL, LayoutTokens.MARGIN_SM)  # Reduced top and bottom margins from XL (20) to SM (8)
+            margins=(LayoutTokens.MARGIN_XL, LayoutTokens.MARGIN_XL, 
+                    LayoutTokens.MARGIN_XL, LayoutTokens.MARGIN_SM)  # Symmetric horizontal margins for proper centering
         )
         
         # Create tab widget

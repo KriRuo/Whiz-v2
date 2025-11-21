@@ -34,8 +34,10 @@ class AnimationCircleWidget(QWidget):
         self._glow_margin = 80  # Extra margin for glow effects
         
         # Set size policy for responsive behavior
+        # Use Preferred for horizontal to prevent excessive expansion
+        # Use Expanding for vertical to fill available space
         from PyQt5.QtWidgets import QSizePolicy
-        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
         
         # Set initial size based on screen class (with safe fallback)
         try:

@@ -848,14 +848,11 @@ class AudioManager:
             if not safe_filename.endswith('.wav'):
                 safe_filename += '.wav'
             
-            # Create temporary file in sandbox
-            temp_path = create_safe_temp_file(suffix='.wav')
-            
-            # Save as WAV file
-            logger.info(f"Saving audio to: {temp_path}")
+            # Save directly to the requested filename
+            logger.info(f"Saving audio to: {filename}")
             logger.info(f"Audio data: {len(frames)} frames, total bytes: {sum(len(f) for f in frames)}")
             
-            with wave.open(str(temp_path), 'wb') as wf:
+            with wave.open(str(filename), 'wb') as wf:
                 wf.setnchannels(self.channels)
                 wf.setsampwidth(2)  # int16 = 2 bytes per sample (WAV standard)
                 wf.setframerate(self.sample_rate)
@@ -872,19 +869,7 @@ class AudioManager:
                 logger.info(f"Converted audio range: min={audio_int16.min()}, max={audio_int16.max()}")
                 
                 wf.writeframes(audio_int16.tobytes())
-                logger.info(f"WAV file written successfully")
-            
-            # Copy the temp file to the requested filename if different
-            if str(temp_path) != filename:
-                try:
-                    shutil.copy2(temp_path, filename)
-                    logger.info(f"Audio copied from {temp_path} to {filename}")
-                except Exception as e:
-                    logger.warning(f"Could not copy audio file to {filename}: {e}")
-                    # Use temp file as fallback
-                    filename = str(temp_path)
-            
-            logger.info(f"Audio saved to {filename}")
+                logger.info(f"WAV file written successfully to {filename}")
             return True
             
         except Exception as e:

@@ -22,12 +22,189 @@ A powerful PyQt-based voice-to-text application with Whisper integration, featur
 - **Storage**: 2GB free space
 - **Audio**: Microphone for voice input
 - **Network**: Internet connection for initial setup
+- **FFmpeg**: Required for audio processing (see installation instructions below)
 
 ### Current Status
 - ✅ **Windows v1.0.0**: Released and ready for download
 - ✅ **macOS v1.0.0**: Released and ready for download
 - ✅ **Linux v1.0.0**: Released and ready for download
 - ✅ **Cross-platform**: Full support for all major operating systems
+
+---
+
+## Development Setup
+
+This section is for developers who want to run Whiz from source code, contribute to the project, or customize the application.
+
+### Prerequisites
+
+- **Python 3.9+** (Python 3.11 recommended for best performance)
+  - Download from [python.org](https://python.org)
+  - Verify: `python --version`
+- **Git** (for cloning the repository)
+- **FFmpeg** (required for audio processing)
+  - Windows: Run `install_ffmpeg.bat` (included in project)
+  - macOS: `brew install ffmpeg`
+  - Linux: `sudo apt install ffmpeg` (Ubuntu/Debian) or equivalent
+
+### Quick Start for Developers
+
+#### 1. Clone the Repository
+
+```bash
+git clone https://github.com/KriRuo/Whiz.git
+cd Whiz
+```
+
+#### 2. Create Virtual Environment (Recommended)
+
+**Windows (PowerShell):**
+```powershell
+python -m venv whiz_env
+.\whiz_env\Scripts\Activate.ps1
+```
+
+**macOS/Linux:**
+```bash
+python3 -m venv whiz_env
+source whiz_env/bin/activate
+```
+
+#### 3. Install Dependencies
+
+```bash
+pip install -r requirements.txt
+```
+
+**Important for Windows Developers:**
+The `requirements.txt` includes `pywin32>=306` which is **critical** for:
+- Single instance management (window activation)
+- System tray integration
+- Windows-specific features
+
+If you encounter issues with `pywin32`, install it manually:
+```powershell
+pip install pywin32>=306
+```
+
+#### 4. Install FFmpeg (Windows)
+
+```bash
+.\install_ffmpeg.bat
+```
+
+This installs FFmpeg to the `ffmpeg/` directory in your project.
+
+#### 5. Verify Setup
+
+Run the verification script to ensure everything is configured correctly:
+
+```bash
+python scripts/tools/verify_setup.py
+```
+
+This will check:
+- ✓ Python version compatibility
+- ✓ All required dependencies
+- ✓ Platform-specific packages (e.g., `pywin32` on Windows)
+- ✓ Audio system functionality
+- ✓ FFmpeg availability
+- ✓ Project file structure
+
+#### 6. Run the Application
+
+**Option A: With splash screen (recommended)**
+```bash
+python main_with_splash.py
+```
+
+**Option B: Direct launch**
+```bash
+python main.py
+```
+
+**Option C: One-click setup and run**
+```bash
+python scripts/tools/setup_and_run.py
+```
+
+This automatically installs dependencies and launches the app.
+
+### Platform-Specific Notes
+
+#### Windows
+- **`pywin32` is required** for proper window management and system integration
+- **FFmpeg**: Use `install_ffmpeg.bat` for automatic installation
+- **Path setup**: Launch scripts automatically add FFmpeg to PATH
+- **Virtual environment**: Use PowerShell or CMD, not Git Bash
+
+#### macOS
+- Install FFmpeg via Homebrew: `brew install ffmpeg`
+- May require accessibility permissions for global hotkeys
+- Use Python 3.9+ from python.org (not system Python)
+
+#### Linux
+- Install FFmpeg: `sudo apt install ffmpeg` (Ubuntu/Debian)
+- Install PortAudio: `sudo apt install portaudio19-dev`
+- May need to install Qt dependencies: `sudo apt install libxcb-xinerama0`
+- Ensure Python development headers: `sudo apt install python3-dev`
+
+### Troubleshooting Development Setup
+
+#### "win32gui not available" Error (Windows)
+**Cause**: `pywin32` package is not installed  
+**Fix**: 
+```powershell
+pip install pywin32>=306
+```
+
+#### "Single instance check failed" Error
+**Cause**: `pywin32` is missing or not properly installed on Windows  
+**Fix**: Reinstall `pywin32` and restart your IDE:
+```powershell
+pip uninstall pywin32
+pip install pywin32>=306
+```
+
+#### Import Errors or Missing Packages
+**Fix**: Reinstall all dependencies:
+```bash
+pip install -r requirements.txt --force-reinstall
+```
+
+#### FFmpeg Not Found
+**Windows**: Run `install_ffmpeg.bat`  
+**macOS**: `brew install ffmpeg`  
+**Linux**: `sudo apt install ffmpeg`
+
+Verify installation:
+```bash
+ffmpeg -version
+```
+
+#### Audio Device Errors
+- Check your microphone is connected and not in use by other applications
+- On Linux, ensure your user is in the `audio` group
+- Run `python scripts/tools/verify_setup.py` to diagnose audio issues
+
+### Development Tools
+
+#### Verify Setup
+```bash
+python scripts/tools/verify_setup.py
+```
+
+Comprehensive check of your development environment.
+
+#### Run Tests
+```bash
+python -m pytest tests/
+```
+
+#### Build for Distribution
+See `scripts/build/` for platform-specific build scripts.
+
+---
 
 ## Core Files
 
@@ -145,6 +322,14 @@ DEFAULTS = {
 ```bash
 # Install dependencies
 pip install -r requirements.txt
+
+# Install FFmpeg (Windows - run as administrator)
+# Option 1: Use automated installer (recommended)
+install_ffmpeg.bat
+
+# Option 2: Manual installation
+# Download from https://www.gyan.dev/ffmpeg/builds/
+# Extract and add bin folder to system PATH
 
 # Run the application
 python main.py
@@ -278,6 +463,14 @@ python -m pytest tests/integration/ -v
 - Check your internet connection
 - Try running as administrator
 - Run `python scripts/tools/setup_and_run.py` manually
+
+#### "FileNotFoundError: ffmpeg not found" or Transcription Fails
+- This means FFmpeg is not installed or not in your system PATH
+- **Solution**: Run `install_ffmpeg.bat` in the project root (Windows)
+- **Alternative**: Download FFmpeg from https://www.gyan.dev/ffmpeg/builds/ and add to PATH
+- **macOS**: `brew install ffmpeg`
+- **Linux**: `sudo apt install ffmpeg` (Ubuntu/Debian) or `sudo yum install ffmpeg` (RHEL/CentOS)
+- After installation, restart the application
 
 #### Audio Device Not Found
 - Ensure your microphone is connected and working

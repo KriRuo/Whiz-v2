@@ -765,6 +765,7 @@ class SpeechController:
                     return
                 
                 # Transcribe using the selected engine with performance monitoring
+                logger.info(f"Using transcription engine: {self.engine}")
                 with self.performance_monitor.time_operation("transcription"):
                     try:
                         if self.engine == "faster":
@@ -789,6 +790,8 @@ class SpeechController:
                                 transcribe_params["language"] = self.language
                             
                             logger.debug(f"Calling faster-whisper with params: {transcribe_params}")
+                            logger.info(f"Transcribing audio file: {self.audio_path}")
+                            logger.info(f"File exists before transcription: {os.path.exists(self.audio_path)}")
                             segments, info = self.model.transcribe(self.audio_path, **transcribe_params)
                             logger.debug(f"faster-whisper returned segments: {type(segments)}, info: {type(info)}")
                             
@@ -832,6 +835,8 @@ class SpeechController:
                                 transcribe_params["language"] = self.language
                             
                             logger.debug(f"Calling openai-whisper with params: {transcribe_params}")
+                            logger.info(f"Transcribing audio file: {self.audio_path}")
+                            logger.info(f"File exists before transcription: {os.path.exists(self.audio_path)}")
                             result = self.model.transcribe(self.audio_path, **transcribe_params)
                             logger.debug(f"openai-whisper returned result: {type(result)}")
                             
@@ -844,6 +849,12 @@ class SpeechController:
                                 if not text:
                                     logger.debug("openai-whisper returned empty text")
                     except Exception as e:
+                        # Log full traceback for debugging
+                        import traceback
+                        logger.error(f"Transcription exception: {e}")
+                        logger.error(f"Exception type: {type(e).__name__}")
+                        logger.error(f"Full traceback:\n{traceback.format_exc()}")
+                        
                         # Classify the exception and provide specific error handling
                         transcription_exception = classify_exception(e)
                         
@@ -859,8 +870,6 @@ class SpeechController:
                         else:
                             logger.error(f"Unexpected transcription error: {e}")
                             logger.error(f"Error type: {type(e)}")
-                            import traceback
-                            logger.error(f"Traceback: {traceback.format_exc()}")
                             self._update_status(f"Transcription error: {e}")
                         
                         text = ""

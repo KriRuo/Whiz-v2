@@ -37,9 +37,20 @@ class RecordTab(BaseTab):
         top_spacer = QSpacerItem(20, top_spacing, QSizePolicy.Minimum, QSizePolicy.Fixed)
         self.main_layout.addItem(top_spacer)
         
-        # Animated circle (now responsive)
+        # Animated circle (now responsive) - wrapped in container for proper centering
         self.animation_circle = AnimationCircleWidget()
-        self.main_layout.addWidget(self.animation_circle, alignment=Qt.AlignCenter)
+        
+        # Create a container widget to ensure proper horizontal centering
+        circle_container = QWidget()
+        circle_container.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        circle_layout = QHBoxLayout(circle_container)
+        circle_layout.setContentsMargins(0, 0, 0, 0)
+        circle_layout.setSpacing(0)
+        circle_layout.addStretch(1)  # Equal stretch before
+        circle_layout.addWidget(self.animation_circle, alignment=Qt.AlignCenter)
+        circle_layout.addStretch(1)  # Equal stretch after
+        
+        self.main_layout.addWidget(circle_container, 0, Qt.AlignHCenter)
         
         # Add spacing between animation circle and buttons using a fixed-height widget
         spacer_widget = QWidget()
@@ -56,10 +67,21 @@ class RecordTab(BaseTab):
         self.stop_button.setObjectName("StopButton")
         self.stop_button.setEnabled(False)
         
-        # Button group with responsive spacing
+        # Button group with responsive spacing - wrapped in container for centering
         responsive_button_spacing = AdaptiveSpacing.get_spacing(LayoutTokens.SPACING_MD)
         button_group = ButtonGroup([self.start_button, self.stop_button], responsive_button_spacing)
-        self.main_layout.addWidget(button_group)
+        
+        # Create a container widget to ensure proper horizontal centering of buttons
+        button_container = QWidget()
+        button_container.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        button_container_layout = QHBoxLayout(button_container)
+        button_container_layout.setContentsMargins(0, 0, 0, 0)
+        button_container_layout.setSpacing(0)
+        button_container_layout.addStretch(1)  # Equal stretch before
+        button_container_layout.addWidget(button_group, alignment=Qt.AlignCenter)
+        button_container_layout.addStretch(1)  # Equal stretch after
+        
+        self.main_layout.addWidget(button_container, 0, Qt.AlignHCenter)
         
         # Wire button events
         self.start_button.clicked.connect(self._on_start)

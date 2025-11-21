@@ -68,46 +68,79 @@ def install_package(package, description=""):
         return False
 
 def check_dependencies():
-    """Check and install all required dependencies"""
+    """Check and install all required dependencies from requirements.txt"""
     print("\nChecking dependencies...")
     
-    # Required packages with descriptions
-    packages = [
-        ("PyQt5==5.15.9", "GUI framework"),
-        ("openai-whisper>=20231117", "Speech recognition"),
-        ("pyaudio>=0.2.11", "Audio input/output"),
-        ("keyboard>=0.13.5", "Global hotkeys"),
-        ("pyautogui>=0.9.54", "Auto-paste functionality"),
-        ("numpy>=1.21.0", "Audio processing")
-    ]
+    # Check if requirements.txt exists
+    requirements_file = project_root / "requirements.txt"
+    if not requirements_file.exists():
+        print(f"ERROR: requirements.txt not found at {requirements_file}")
+        return False
     
-    missing_packages = []
+    print(f"Installing dependencies from requirements.txt...")
+    print("This may take a few minutes on first run...")
+    print()
     
-    # Check what's already installed
-    for package, description in packages:
-        package_name = package.split('==')[0].split('>=')[0]
-        try:
-            importlib.import_module(package_name)
-            print(f"OK: {package_name} - {description}")
-        except ImportError:
-            print(f"MISSING: {package_name} - {description}")
-            missing_packages.append((package, description))
-    
-    # Install missing packages
-    if missing_packages:
-        print(f"\nInstalling {len(missing_packages)} missing packages...")
-        print("This may take a few minutes on first run...")
-        print()
+    try:
+        # Install all dependencies from requirements.txt
+        result = subprocess.run(
+            [sys.executable, "-m", "pip", "install", "-r", str(requirements_file)],
+            capture_output=True,
+            text=True,
+            timeout=600  # 10 minute timeout for large packages like torch
+        )
         
-        for package, description in missing_packages:
-            if not install_package(package, description):
+        if result.returncode == 0:
+            print("\nOK: All dependencies installed successfully!")
+            
+            # Verify critical imports
+            print("\nVerifying critical packages...")
+            critical_packages = {
+                "PyQt5": "GUI framework",
+                "whisper": "Speech recognition (openai-whisper)",
+                "faster_whisper": "Optimized speech recognition",
+                "sounddevice": "Audio input/output",
+                "pynput": "Keyboard/mouse control",
+                "pyautogui": "Auto-paste functionality",
+                "numpy": "Audio processing",
+                "psutil": "Process management"
+            }
+            
+            # Add Windows-specific packages
+            if sys.platform == "win32":
+                critical_packages["win32gui"] = "Windows window management (pywin32)"
+            
+            all_ok = True
+            for package_name, description in critical_packages.items():
+                try:
+                    if package_name == "whisper":
+                        importlib.import_module("whisper")
+                    else:
+                        importlib.import_module(package_name)
+                    print(f"  ✓ {package_name} - {description}")
+                except ImportError:
+                    print(f"  ✗ {package_name} - {description} (MISSING)")
+                    all_ok = False
+            
+            if not all_ok:
+                print("\nWARNING: Some packages failed to import. See above for details.")
                 return False
-        
-        print("\nOK: All packages installed successfully!")
-    else:
-        print("\nOK: All dependencies are already installed!")
-    
-    return True
+            
+            return True
+        else:
+            print(f"\nERROR: Failed to install dependencies")
+            print(f"Exit code: {result.returncode}")
+            if result.stderr:
+                print(f"Error output:\n{result.stderr}")
+            return False
+            
+    except subprocess.TimeoutExpired:
+        print("\nERROR: Installation timed out (>10 minutes)")
+        print("This may indicate a network issue or very slow download speeds")
+        return False
+    except Exception as e:
+        print(f"\nERROR: Unexpected error during installation: {e}")
+        return False
 
 def test_installation():
     """Test that everything works"""
