@@ -37,6 +37,7 @@ Last Updated: October 10, 2025
 import sys
 import os
 import traceback
+from pathlib import Path
 from PyQt5.QtWidgets import QApplication, QMessageBox
 from PyQt5.QtCore import Qt
 
@@ -44,6 +45,29 @@ from PyQt5.QtCore import Qt
 from core.logging_config import initialize_logging, get_logger
 from core.single_instance_manager import SingleInstanceManager
 from splash_screen import SplashScreen
+
+# Add FFmpeg to PATH if it exists locally
+# This ensures Whisper can use FFmpeg for audio processing
+def _setup_ffmpeg_path():
+    """Add local FFmpeg installation to PATH if available"""
+    try:
+        # Get the project root directory
+        project_root = Path(__file__).parent.resolve()
+        ffmpeg_bin = project_root / "ffmpeg" / "bin"
+        
+        # Check if FFmpeg exists
+        if ffmpeg_bin.exists() and (ffmpeg_bin / "ffmpeg.exe").exists():
+            # Add to PATH for this session
+            ffmpeg_path_str = str(ffmpeg_bin)
+            if ffmpeg_path_str not in os.environ.get("PATH", ""):
+                os.environ["PATH"] = f"{ffmpeg_path_str}{os.pathsep}{os.environ.get('PATH', '')}"
+                return True
+    except Exception:
+        pass  # Silently fail - FFmpeg may be in system PATH
+    return False
+
+# Setup FFmpeg before anything else
+_setup_ffmpeg_path()
 
 
 def main():

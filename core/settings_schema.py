@@ -225,8 +225,8 @@ class SettingsSchema:
         self.schema["whisper/engine"] = SettingSchema(
             key="whisper/engine",
             type=SettingType.ENUM,
-            default="faster",
-            description="Whisper engine: 'faster' (5-10x faster, recommended) or 'openai' (original implementation)",
+            default="openai",
+            description="Whisper engine: 'openai' (stable, recommended) or 'faster' (experimental, may have compatibility issues)",
             allowed_values=["openai", "faster"],
             validator=self._validate_whisper_engine
         )

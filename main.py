@@ -7,6 +7,7 @@ A hotkey-based voice-to-text application using Whisper and sounddevice.
 import sys
 import traceback
 import os
+from pathlib import Path
 from PyQt5.QtWidgets import QApplication, QMessageBox
 from PyQt5.QtCore import Qt
 from speech_controller import SpeechController
@@ -14,6 +15,29 @@ from speech_ui import SpeechApp
 from core.settings_manager import SettingsManager
 from core.logging_config import initialize_logging, get_logger
 from core.platform_utils import PlatformUtils
+
+# Add FFmpeg to PATH if it exists locally
+# This ensures Whisper can use FFmpeg for audio processing
+def _setup_ffmpeg_path():
+    """Add local FFmpeg installation to PATH if available"""
+    try:
+        # Get the project root directory
+        project_root = Path(__file__).parent.resolve()
+        ffmpeg_bin = project_root / "ffmpeg" / "bin"
+        
+        # Check if FFmpeg exists
+        if ffmpeg_bin.exists() and (ffmpeg_bin / "ffmpeg.exe").exists():
+            # Add to PATH for this session
+            ffmpeg_path_str = str(ffmpeg_bin)
+            if ffmpeg_path_str not in os.environ.get("PATH", ""):
+                os.environ["PATH"] = f"{ffmpeg_path_str}{os.pathsep}{os.environ.get('PATH', '')}"
+                return True
+    except Exception:
+        pass  # Silently fail - FFmpeg may be in system PATH
+    return False
+
+# Setup FFmpeg before anything else
+_setup_ffmpeg_path()
 
 def main():
     """Main application entry point"""
@@ -142,7 +166,7 @@ def main():
             auto_paste=settings.get("behavior/auto_paste", True),  # Use saved auto-paste setting
             language=settings.get("whisper/language", None),  # Use saved language or auto-detect
             temperature=settings.get("whisper/temperature", 0.0),  # Default to fastest temperature
-            engine=settings.get("whisper/engine", "faster")  # Default to faster-whisper engine (5-10x faster)
+            engine=settings.get("whisper/engine", "openai")  # Default to openai engine (faster-whisper has PyQt/ONNX issues)
         )
         
         # Check if controller initialized successfully

@@ -146,24 +146,37 @@ class PreferencesDialog(BaseDialog):
         return layout
     
     def create_styled_combobox(self, items=None):
-        """Create a QComboBox with proper palette for white text."""
+        """Create a QComboBox with proper palette for white text and visible selected value."""
         from PyQt5.QtGui import QPalette, QColor
         from PyQt5.QtWidgets import QListView
         
         combo = QComboBox()
         
-        # Add items if provided
-        if items:
-            combo.addItems(items)
+        # Ensure the combobox is not editable
+        combo.setEditable(False)
         
         # Create and configure a custom view for the dropdown
         view = QListView()
         combo.setView(view)
         
-        # Set palette for the combo box button text
+        # Add items if provided (do this after setting view)
+        if items:
+            combo.addItems(items)
+        
+        # Set comprehensive palette for the combo box
         combo_palette = combo.palette()
-        combo_palette.setColor(QPalette.ButtonText, QColor(ColorTokens.TEXT_PRIMARY))
-        combo_palette.setColor(QPalette.WindowText, QColor(ColorTokens.TEXT_PRIMARY))
+        # These roles control the text display when closed
+        combo_palette.setColor(QPalette.Active, QPalette.ButtonText, QColor(ColorTokens.TEXT_PRIMARY))
+        combo_palette.setColor(QPalette.Inactive, QPalette.ButtonText, QColor(ColorTokens.TEXT_PRIMARY))
+        combo_palette.setColor(QPalette.Active, QPalette.WindowText, QColor(ColorTokens.TEXT_PRIMARY))
+        combo_palette.setColor(QPalette.Inactive, QPalette.WindowText, QColor(ColorTokens.TEXT_PRIMARY))
+        combo_palette.setColor(QPalette.Active, QPalette.Text, QColor(ColorTokens.TEXT_PRIMARY))
+        combo_palette.setColor(QPalette.Inactive, QPalette.Text, QColor(ColorTokens.TEXT_PRIMARY))
+        # Background colors
+        combo_palette.setColor(QPalette.Active, QPalette.Base, QColor(ColorTokens.BG_PRIMARY))
+        combo_palette.setColor(QPalette.Inactive, QPalette.Base, QColor(ColorTokens.BG_PRIMARY))
+        combo_palette.setColor(QPalette.Active, QPalette.Button, QColor(ColorTokens.BG_PRIMARY))
+        combo_palette.setColor(QPalette.Inactive, QPalette.Button, QColor(ColorTokens.BG_PRIMARY))
         combo.setPalette(combo_palette)
         
         # Set palette for the dropdown view
@@ -175,6 +188,9 @@ class PreferencesDialog(BaseDialog):
         view_palette.setColor(QPalette.Highlight, QColor(ColorTokens.ACCENT_PRIMARY))
         view_palette.setColor(QPalette.HighlightedText, QColor(ColorTokens.BG_PRIMARY))
         view.setPalette(view_palette)
+        
+        # Force update to apply palette
+        combo.update()
         
         return combo
     
@@ -739,10 +755,21 @@ class PreferencesDialog(BaseDialog):
             # Use cached settings for better performance (no validation overhead)
             self.current_settings = self.settings_manager.load_all()
             
-            # General settings
-            self.theme_combo.setCurrentText(self.current_settings.get("ui/theme", "system"))
-            self.language_combo.setCurrentText(self.current_settings.get("whisper/language", "auto"))
-            self.engine_combo.setCurrentText(self.current_settings.get("whisper/engine", "faster"))
+            # General settings - use setCurrentIndex with findText for reliability
+            theme_value = self.current_settings.get("ui/theme", "system")
+            theme_index = self.theme_combo.findText(theme_value)
+            if theme_index >= 0:
+                self.theme_combo.setCurrentIndex(theme_index)
+            
+            language_value = self.current_settings.get("whisper/language", "auto")
+            language_index = self.language_combo.findText(language_value)
+            if language_index >= 0:
+                self.language_combo.setCurrentIndex(language_index)
+            
+            engine_value = self.current_settings.get("whisper/engine", "faster")
+            engine_index = self.engine_combo.findText(engine_value)
+            if engine_index >= 0:
+                self.engine_combo.setCurrentIndex(engine_index)
             
             # Behavior settings
             self.auto_paste_checkbox.setChecked(self.current_settings.get("behavior/auto_paste", True))

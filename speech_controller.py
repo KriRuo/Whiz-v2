@@ -480,6 +480,7 @@ class SpeechController:
                     
                     # Use faster-whisper with optimized settings for better performance
                     try:
+                        logger.info(f"Instantiating FasterWhisperModel with device={device}, compute_type={compute_type}")
                         self.model = FasterWhisperModel(
                             self.model_size, 
                             device=device, 
@@ -490,8 +491,11 @@ class SpeechController:
                             cpu_threads=4 if device == "cpu" else 1,  # Use multiple CPU threads only for CPU
                             num_workers=1   # Single worker for stability
                         )
+                        logger.info("FasterWhisperModel instantiated successfully")
                     except Exception as e:
+                        import traceback
                         logger.error(f"Failed to load faster-whisper model: {e}")
+                        logger.error(f"Traceback: {traceback.format_exc()}")
                         logger.info("Falling back to OpenAI Whisper...")
                         # Fallback to OpenAI Whisper
                         self.engine = "openai"
@@ -542,10 +546,11 @@ class SpeechController:
             return "not_loaded"
     
     def preload_model(self):
-        """Preload the Whisper model in the background"""
+        """Preload the Whisper model in a background thread"""
         with self._model_condition:
             if not self.model_loaded and not self.model_loading and not self.model_load_error:
                 # Start loading in a separate thread to avoid blocking
+                # Use daemon thread so it doesn't prevent app shutdown
                 load_thread = threading.Thread(target=self._background_load_model, daemon=True)
                 load_thread.start()
                 
@@ -560,7 +565,9 @@ class SpeechController:
     def _background_load_model(self):
         """Background model loading thread function"""
         try:
+            logger.info("Starting _load_model_implementation in background thread...")
             success = self._load_model_implementation()
+            logger.info(f"_load_model_implementation returned: {success}")
             
             with self._model_condition:
                 if success:
@@ -579,10 +586,12 @@ class SpeechController:
                 self._model_condition.notify_all()
                 
         except Exception as e:
+            import traceback
             with self._model_condition:
                 self.model_loading = False
                 self.model_load_error = f"Unexpected error: {e}"
                 logger.error(f"Unexpected error in background model loading: {e}")
+                logger.error(f"Full traceback: {traceback.format_exc()}")
                 self._update_status(f"Error loading model: {e}")
                 
                 # Notify all waiting threads
