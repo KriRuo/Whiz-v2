@@ -223,9 +223,9 @@ class ColorTokens:
     ACCENT_GRADIENT_START = "#00d4ff"  # Cyan
     ACCENT_GRADIENT_END = "#a855f7"    # Purple
     
-    TEXT_PRIMARY = "#e4e6eb"         # Main text
-    TEXT_SECONDARY = "#9ca3af"       # Secondary text
-    TEXT_TERTIARY = "#6b7280"        # Tertiary text
+    TEXT_PRIMARY = "#FFFFFF"         # Main text - Pure white for maximum readability
+    TEXT_SECONDARY = "#B8BFC8"       # Secondary text - Brighter gray
+    TEXT_TERTIARY = "#8891A0"        # Tertiary text - Medium gray
     
     BUTTON_PRIMARY = "#00d4ff"       # Start button
     BUTTON_SECONDARY = "#4a5056"     # Stop button

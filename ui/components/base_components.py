@@ -3,7 +3,8 @@ Base UI Components for Whiz Voice-to-Text Application
 Reusable components with consistent styling and behavior.
 """
 
-from PyQt5.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QFrame, QDialog
+from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, 
+                             QFrame, QDialog, QGroupBox, QFormLayout)
 from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtGui import QFont
 from ui.layout_system import LayoutBuilder, LayoutTokens, ColorTokens
@@ -68,16 +69,16 @@ class StatusDisplay(QWidget):
         self.status_label = QLabel(initial_text)
         self.status_label.setAlignment(Qt.AlignCenter)
         self.status_label.setFont(QFont("Inter", LayoutTokens.FONT_LG, QFont.Bold))
-        self.status_label.setStyleSheet("""
-            QLabel {
-                color: #2D1B69;
+        self.status_label.setStyleSheet(f"""
+            QLabel {{
+                color: {ColorTokens.TEXT_PRIMARY};
                 font-weight: 600;
                 font-size: 15px;
                 padding: 8px;
-                background-color: rgba(255, 255, 255, 0.9);
+                background-color: {ColorTokens.BG_SECONDARY};
                 border-radius: 8px;
-                border: 1px solid rgba(255, 182, 193, 0.3);
-            }
+                border: 1px solid {ColorTokens.BORDER_SUBTLE};
+            }}
         """)
         
         layout.addWidget(self.status_label)
@@ -263,3 +264,103 @@ class ButtonGroup(QWidget):
             layout.addWidget(button)
         
         self.setLayout(layout)
+
+
+class SettingsSection(QGroupBox):
+    """
+    Reusable settings section component with consistent styling.
+    
+    Provides a QGroupBox with standardized styling for preferences dialogs.
+    Can contain form layouts, vertical layouts, or horizontal layouts.
+    
+    Usage:
+        section = SettingsSection("User Interface", layout_type="form")
+        section.layout().addRow("Theme:", theme_combo)
+    """
+    
+    def __init__(self, title: str, layout_type: str = "form"):
+        """
+        Initialize the settings section.
+        
+        Args:
+            title: The section title to display
+            layout_type: Layout type - "form", "vertical", or "horizontal"
+        """
+        super().__init__(title)
+        self.init_layout(layout_type)
+        self.apply_styling()
+    
+    def init_layout(self, layout_type: str):
+        """Initialize the section layout."""
+        if layout_type == "form":
+            layout = QFormLayout(self)
+            layout.setSpacing(LayoutTokens.SPACING_MD)
+        elif layout_type == "vertical":
+            layout = QVBoxLayout(self)
+            layout.setSpacing(LayoutTokens.SPACING_MD)
+        elif layout_type == "horizontal":
+            layout = QHBoxLayout(self)
+            layout.setSpacing(LayoutTokens.SPACING_MD)
+        else:
+            raise ValueError(f"Unknown layout type: {layout_type}")
+    
+    def apply_styling(self):
+        """Apply consistent styling to the section."""
+        self.setStyleSheet(f"""
+            QGroupBox {{
+                font-weight: 600;
+                color: {ColorTokens.TEXT_PRIMARY} !important;
+                border: 1px solid {ColorTokens.BORDER_SUBTLE};
+                border-radius: {LayoutTokens.RADIUS_MD}px;
+                margin-top: 20px;
+                padding-top: 20px;
+                background-color: {ColorTokens.BG_PRIMARY};
+            }}
+            
+            QGroupBox::title {{
+                subcontrol-origin: margin;
+                left: {LayoutTokens.SPACING_LG}px;
+                padding: 0 {LayoutTokens.SPACING_MD}px 0 {LayoutTokens.SPACING_MD}px;
+                color: {ColorTokens.TEXT_PRIMARY} !important;
+                font-weight: 700;
+                font-size: {LayoutTokens.FONT_XL}px;
+            }}
+        """)
+
+
+class InfoLabel(QLabel):
+    """
+    Reusable info/help text label with consistent styling.
+    
+    Displays secondary text with proper styling for help/info messages
+    in settings dialogs. Automatically handles word wrapping.
+    
+    Usage:
+        info = InfoLabel("This is a helpful message about the setting.")
+        layout.addRow(info)
+    """
+    
+    def __init__(self, text: str, font_size: int = 12):
+        """
+        Initialize the info label.
+        
+        Args:
+            text: The info text to display
+            font_size: Font size in pixels (default: 12)
+        """
+        super().__init__(text)
+        self.setWordWrap(True)
+        self.apply_styling(font_size)
+    
+    def apply_styling(self, font_size: int):
+        """Apply consistent styling to the info label."""
+        self.setStyleSheet(f"""
+            QLabel {{
+                color: {ColorTokens.TEXT_SECONDARY};
+                font-size: {font_size}px;
+                padding: 12px;
+                background-color: transparent;
+                border-radius: 6px;
+                line-height: 1.4;
+            }}
+        """)

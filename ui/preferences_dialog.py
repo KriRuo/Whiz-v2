@@ -18,7 +18,7 @@ from PyQt5.QtMultimedia import QSoundEffect
 from core.settings_manager import SettingsManager
 from core.settings_schema import SETTINGS_SCHEMA
 from core.logging_config import get_logger
-from ui.components import BaseDialog
+from ui.components import BaseDialog, SettingsSection, InfoLabel
 
 logger = get_logger(__name__)
 from ui.widgets.gradient_tab_widget import GradientTabWidget
@@ -95,6 +95,15 @@ class PreferencesDialog(BaseDialog):
         # Apply styling using layout tokens
         self.setStyleSheet(self.get_dialog_stylesheet())
         
+        # Force palette colors to ensure all text is white (fixes Qt Fusion style black text)
+        from PyQt5.QtGui import QPalette, QColor
+        palette = self.palette()
+        palette.setColor(QPalette.WindowText, QColor(ColorTokens.TEXT_PRIMARY))
+        palette.setColor(QPalette.Text, QColor(ColorTokens.TEXT_PRIMARY))
+        palette.setColor(QPalette.ButtonText, QColor(ColorTokens.TEXT_PRIMARY))
+        palette.setColor(QPalette.BrightText, QColor(ColorTokens.TEXT_PRIMARY))
+        self.setPalette(palette)
+        
         # Ensure tab elision is disabled AFTER stylesheet is applied
         if hasattr(self.tab_widget, 'tabBar'):
             self.tab_widget.tabBar().setElideMode(Qt.ElideNone)
@@ -135,6 +144,39 @@ class PreferencesDialog(BaseDialog):
         layout = QVBoxLayout()
         layout.setSpacing(spacing or LayoutTokens.SPACING_MD)
         return layout
+    
+    def create_styled_combobox(self, items=None):
+        """Create a QComboBox with proper palette for white text."""
+        from PyQt5.QtGui import QPalette, QColor
+        from PyQt5.QtWidgets import QListView
+        
+        combo = QComboBox()
+        
+        # Add items if provided
+        if items:
+            combo.addItems(items)
+        
+        # Create and configure a custom view for the dropdown
+        view = QListView()
+        combo.setView(view)
+        
+        # Set palette for the combo box button text
+        combo_palette = combo.palette()
+        combo_palette.setColor(QPalette.ButtonText, QColor(ColorTokens.TEXT_PRIMARY))
+        combo_palette.setColor(QPalette.WindowText, QColor(ColorTokens.TEXT_PRIMARY))
+        combo.setPalette(combo_palette)
+        
+        # Set palette for the dropdown view
+        view_palette = view.palette()
+        view_palette.setColor(QPalette.Text, QColor(ColorTokens.TEXT_PRIMARY))
+        view_palette.setColor(QPalette.WindowText, QColor(ColorTokens.TEXT_PRIMARY))
+        view_palette.setColor(QPalette.Base, QColor(ColorTokens.BG_SECONDARY))
+        view_palette.setColor(QPalette.Window, QColor(ColorTokens.BG_SECONDARY))
+        view_palette.setColor(QPalette.Highlight, QColor(ColorTokens.ACCENT_PRIMARY))
+        view_palette.setColor(QPalette.HighlightedText, QColor(ColorTokens.BG_PRIMARY))
+        view.setPalette(view_palette)
+        
+        return combo
     
     def get_dialog_stylesheet(self):
         """Get the dialog stylesheet using ColorTokens for theme consistency."""
@@ -218,7 +260,17 @@ class PreferencesDialog(BaseDialog):
                 color: white;
             }}
             
-            QLineEdit, QComboBox {{
+            QLineEdit {{
+                padding: {LayoutTokens.SPACING_SM}px {LayoutTokens.SPACING_MD}px;
+                border: 1px solid {ColorTokens.BORDER_SUBTLE};
+                border-radius: {LayoutTokens.RADIUS_SM}px;
+                font-size: {LayoutTokens.FONT_LG}px;
+                background-color: {ColorTokens.BG_PRIMARY};
+                color: {ColorTokens.TEXT_PRIMARY} !important;
+                min-height: 18px;
+            }}
+            
+            QComboBox {{
                 padding: {LayoutTokens.SPACING_SM}px {LayoutTokens.SPACING_MD}px;
                 border: 1px solid {ColorTokens.BORDER_SUBTLE};
                 border-radius: {LayoutTokens.RADIUS_SM}px;
@@ -242,14 +294,41 @@ class PreferencesDialog(BaseDialog):
             }}
             
             QComboBox QAbstractItemView {{
-                background-color: {ColorTokens.BG_PRIMARY};
+                background-color: {ColorTokens.BG_SECONDARY};
                 color: {ColorTokens.TEXT_PRIMARY} !important;
                 border: 1px solid {ColorTokens.BORDER_SUBTLE};
                 selection-background-color: {ColorTokens.ACCENT_PRIMARY};
-                selection-color: white;
+                selection-color: {ColorTokens.TEXT_PRIMARY} !important;
+                outline: 0;
+            }}
+            
+            QComboBox QListView {{
+                background-color: {ColorTokens.BG_SECONDARY};
+                color: {ColorTokens.TEXT_PRIMARY} !important;
+                border: 1px solid {ColorTokens.BORDER_SUBTLE};
+                padding: 4px;
+                outline: 0;
             }}
             
             QComboBox::item {{
+                color: {ColorTokens.TEXT_PRIMARY} !important;
+                background-color: {ColorTokens.BG_SECONDARY};
+                padding: 8px 12px;
+                min-height: 28px;
+                border: none;
+            }}
+            
+            QComboBox::item:selected {{
+                background-color: {ColorTokens.ACCENT_PRIMARY};
+                color: {ColorTokens.BG_PRIMARY} !important;
+            }}
+            
+            QComboBox::item:hover {{
+                background-color: {ColorTokens.BG_TERTIARY};
+                color: {ColorTokens.TEXT_PRIMARY} !important;
+            }}
+            
+            QComboBox::item:!selected {{
                 color: {ColorTokens.TEXT_PRIMARY} !important;
             }}
             
@@ -262,6 +341,12 @@ class PreferencesDialog(BaseDialog):
                 font-size: {LayoutTokens.FONT_LG}px;
                 color: {ColorTokens.TEXT_PRIMARY} !important;
                 line-height: 1.4;
+                background: transparent;
+            }}
+            
+            /* Force all labels in form layouts to use correct color */
+            QFormLayout QLabel {{
+                color: {ColorTokens.TEXT_PRIMARY} !important;
             }}
             
             QCheckBox {{
@@ -289,196 +374,169 @@ class PreferencesDialog(BaseDialog):
         """
     
     def create_general_tab(self):
-        """Create the General tab using layout system."""
+        """Create the General tab using unified components."""
         tab = QWidget()
         layout = self.create_tab_layout(tab)
         
-        # UI Settings Group
-        ui_group = QGroupBox("User Interface")
-        ui_layout = self.create_group_layout(ui_group, "form")
+        # UI Settings Section
+        ui_section = SettingsSection("User Interface", layout_type="form")
         
         # Theme selection
-        self.theme_combo = QComboBox()
-        self.theme_combo.addItems(["system", "light", "dark"])
-        ui_layout.addRow("Theme:", self.theme_combo)
+        self.theme_combo = self.create_styled_combobox(["system", "light", "dark"])
+        ui_section.layout().addRow("Theme:", self.theme_combo)
         
         # Theme info
-        theme_info = QLabel(
+        theme_info = InfoLabel(
             "• system: Follow your system's dark/light mode setting\n"
             "• light: Always use light theme\n"
             "• dark: Always use dark theme"
         )
-        theme_info.setWordWrap(True)
-        theme_info.setStyleSheet(f"color: {ColorTokens.TEXT_SECONDARY}; font-size: 12px; padding: 12px; background-color: transparent; border-radius: 6px;")
-        ui_layout.addRow("Theme Info:", theme_info)
+        ui_section.layout().addRow(theme_info)
         
-        layout.addWidget(ui_group)
+        layout.addWidget(ui_section)
         
-        # Language Settings Group
-        language_group = QGroupBox("Language Settings")
-        language_layout = self.create_group_layout(language_group, "form")
+        # Language Settings Section
+        language_section = SettingsSection("Language Settings", layout_type="form")
         
         # Language selection
-        self.language_combo = QComboBox()
-        self.language_combo.addItems([
+        self.language_combo = self.create_styled_combobox([
             "auto", "en", "de", "es", "fr", "it", "pt", "ru", "ja", "ko", "zh", 
             "sv", "fi", "no", "da", "nl", "pl", "tr", "ar", "hi"
         ])
-        language_layout.addRow("Language:", self.language_combo)
+        language_section.layout().addRow("Language:", self.language_combo)
         
         # Language info
-        language_info = QLabel(
+        language_info = InfoLabel(
             "• auto: Automatically detect language from speech\n"
             "• Specific languages: Force transcription in that language\n"
             "• Using a specific language can improve accuracy"
         )
-        language_info.setWordWrap(True)
-        language_info.setStyleSheet(f"color: {ColorTokens.TEXT_SECONDARY}; font-size: 12px; padding: 12px; background-color: transparent; border-radius: 6px;")
-        language_layout.addRow("Language Info:", language_info)
+        language_section.layout().addRow(language_info)
         
-        layout.addWidget(language_group)
+        layout.addWidget(language_section)
         
-        # Engine Settings Group
-        engine_group = QGroupBox("Transcription Engine")
-        engine_layout = self.create_group_layout(engine_group, "form")
+        # Engine Settings Section
+        engine_section = SettingsSection("Transcription Engine", layout_type="form")
         
         # Engine selection
-        self.engine_combo = QComboBox()
-        self.engine_combo.addItems(["openai", "faster"])
-        engine_layout.addRow("Engine:", self.engine_combo)
+        self.engine_combo = self.create_styled_combobox(["faster", "openai"])  # faster first as it's the default
+        engine_section.layout().addRow("Engine:", self.engine_combo)
         
         # Engine info
-        engine_info = QLabel(
+        engine_info = InfoLabel(
             "• faster: Faster-whisper implementation (5-10x faster, recommended, default)\n"
             "• openai: Original Whisper implementation (slower but very stable)\n\n"
             "Note: faster-whisper uses INT8 quantization for efficient CPU inference.\n"
             "Falls back to openai automatically if faster-whisper is unavailable."
         )
-        engine_info.setWordWrap(True)
-        engine_info.setStyleSheet(f"color: {ColorTokens.TEXT_SECONDARY}; font-size: 12px; padding: 12px; background-color: transparent; border-radius: 6px;")
-        engine_layout.addRow("Engine Info:", engine_info)
+        engine_section.layout().addRow(engine_info)
         
-        layout.addWidget(engine_group)
+        layout.addWidget(engine_section)
         
         layout.addStretch()
         self.tab_widget.addTab(tab, "General")
     
     def create_behavior_tab(self):
-        """Create the Behavior tab."""
+        """Create the Behavior tab using unified components."""
         tab = QWidget()
         layout = self.create_tab_layout(tab)
         
-        # Recording Behavior Group
-        recording_group = QGroupBox("Recording Behavior")
-        recording_layout = self.create_group_layout(recording_group, "form")
+        # Recording Behavior Section
+        recording_section = SettingsSection("Recording Behavior", layout_type="form")
         
         # Auto-paste setting
         self.auto_paste_checkbox = QCheckBox("Enable Auto-Paste")
-        recording_layout.addRow(self.auto_paste_checkbox)
+        recording_section.layout().addRow(self.auto_paste_checkbox)
         
         # Toggle mode setting
         self.toggle_mode_checkbox = QCheckBox("Toggle Mode (press once to start/stop)")
-        recording_layout.addRow(self.toggle_mode_checkbox)
+        recording_section.layout().addRow(self.toggle_mode_checkbox)
         
-        # Add info about toggle mode
-        toggle_info = QLabel(
+        # Toggle mode info
+        toggle_info = InfoLabel(
             "• Hold Mode: Hold the hotkey while speaking, release to transcribe\n"
             "• Toggle Mode: Press once to start recording, press again to stop"
         )
-        toggle_info.setWordWrap(True)
-        toggle_info.setStyleSheet(f"color: {ColorTokens.TEXT_SECONDARY}; font-size: 12px; padding: 12px; background-color: transparent; border-radius: 6px;")
-        recording_layout.addRow(toggle_info)
+        recording_section.layout().addRow(toggle_info)
         
         # Minimize to tray setting
         self.minimize_to_tray_checkbox = QCheckBox("Keep app running in background on close")
-        recording_layout.addRow(self.minimize_to_tray_checkbox)
+        recording_section.layout().addRow(self.minimize_to_tray_checkbox)
         
-        # Add info about minimize to tray
-        tray_info = QLabel(
+        # Tray info
+        tray_info = InfoLabel(
             "When enabled, closing the window will minimize it to the system tray instead of exiting.\n"
             "You can restore the window by clicking the tray icon or using the tray menu."
         )
-        tray_info.setWordWrap(True)
-        tray_info.setStyleSheet(f"color: {ColorTokens.TEXT_SECONDARY}; font-size: 12px; padding: 12px; background-color: transparent; border-radius: 6px;")
-        recording_layout.addRow(tray_info)
+        recording_section.layout().addRow(tray_info)
         
-        layout.addWidget(recording_group)
+        layout.addWidget(recording_section)
         
-        # Visual Indicator Group
-        visual_group = QGroupBox("Visual Indicator")
-        visual_layout = self.create_group_layout(visual_group, "form")
+        # Visual Indicator Section
+        visual_section = SettingsSection("Visual Indicator", layout_type="form")
         
         # Visual indicator setting
         self.visual_indicator_checkbox = QCheckBox("Show visual indicator while recording")
-        visual_layout.addRow(self.visual_indicator_checkbox)
+        visual_section.layout().addRow(self.visual_indicator_checkbox)
         
         # Indicator position setting
-        self.indicator_position_combo = QComboBox()
-        self.indicator_position_combo.addItems([
+        self.indicator_position_combo = self.create_styled_combobox([
             "Top Left", "Top Right", "Bottom Right", "Bottom Left",
             "Top Center", "Middle Center", "Bottom Center"
         ])
-        visual_layout.addRow("Indicator Position:", self.indicator_position_combo)
+        visual_section.layout().addRow("Indicator Position:", self.indicator_position_combo)
         
-        # Add info about visual indicator
-        visual_info = QLabel(
+        # Visual indicator info
+        visual_info = InfoLabel(
             "The visual indicator shows a small overlay on screen while recording.\n"
             "This helps you see that the application is actively listening."
         )
-        visual_info.setWordWrap(True)
-        visual_info.setStyleSheet(f"color: {ColorTokens.TEXT_SECONDARY}; font-size: 12px; padding: 12px; background-color: transparent; border-radius: 6px;")
-        visual_layout.addRow(visual_info)
+        visual_section.layout().addRow(visual_info)
         
-        layout.addWidget(visual_group)
+        layout.addWidget(visual_section)
         
-        # Hotkey Settings Group
-        hotkey_group = QGroupBox("Hotkey Settings")
-        hotkey_layout = self.create_group_layout(hotkey_group, "form")
+        # Hotkey Settings Section
+        hotkey_section = SettingsSection("Hotkey Settings", layout_type="form")
         
         # Hotkey selection
-        self.hotkey_combo = QComboBox()
-        self.hotkey_combo.addItems([
+        self.hotkey_combo = self.create_styled_combobox([
             "F8", "F9", "ctrl+shift+R", "ctrl+alt+S", "alt gr", 
             "caps lock", "cmd+R", "shift+F12"
         ])
-        hotkey_layout.addRow("Hotkey:", self.hotkey_combo)
+        hotkey_section.layout().addRow("Hotkey:", self.hotkey_combo)
         
         # Hotkey info
-        hotkey_info = QLabel(
+        hotkey_info = InfoLabel(
             "Choose the key combination to start/stop recording.\n"
             "The hotkey works in both Hold Mode and Toggle Mode."
         )
-        hotkey_info.setWordWrap(True)
-        hotkey_info.setStyleSheet(f"color: {ColorTokens.TEXT_SECONDARY}; font-size: 12px; padding: 12px; background-color: transparent; border-radius: 6px;")
-        hotkey_layout.addRow(hotkey_info)
+        hotkey_section.layout().addRow(hotkey_info)
         
-        layout.addWidget(hotkey_group)
+        layout.addWidget(hotkey_section)
         
         layout.addStretch()
         self.tab_widget.addTab(tab, "Behavior")
     
     def create_audio_tab(self):
-        """Create the Audio tab."""
+        """Create the Audio tab using unified components."""
         tab = QWidget()
         layout = self.create_tab_layout(tab)
         
-        # Audio Effects Group
-        effects_group = QGroupBox("Audio Effects")
-        effects_layout = self.create_group_layout(effects_group, "form")
+        # Audio Effects Section
+        effects_section = SettingsSection("Audio Effects", layout_type="form")
         
         # Enable sound effects
         self.sound_effects_checkbox = QCheckBox("Enable start/stop sound effects")
-        effects_layout.addRow(self.sound_effects_checkbox)
+        effects_section.layout().addRow(self.sound_effects_checkbox)
         
-        layout.addWidget(effects_group)
+        layout.addWidget(effects_section)
         
-        # Device Selection Group
-        device_group = QGroupBox("Microphone Device")
-        device_layout = self.create_group_layout(device_group, "form")
+        # Device Selection Section
+        device_section = SettingsSection("Microphone Device", layout_type="form")
         
-        # Device selection combo box
+        # Device selection combo box with buttons
         device_selection_layout = self.create_horizontal_layout()
-        self.device_combo = QComboBox()
+        self.device_combo = self.create_styled_combobox()
         self.device_combo.currentIndexChanged.connect(self.on_device_changed)
         device_selection_layout.addWidget(self.device_combo)
         
@@ -492,23 +550,23 @@ class PreferencesDialog(BaseDialog):
         self.test_device_button.clicked.connect(self.test_selected_device)
         device_selection_layout.addWidget(self.test_device_button)
         
-        device_layout.addRow("Device:", device_selection_layout)
+        device_section.layout().addRow("Device:", device_selection_layout)
         
-        # No device warning (initially hidden)
-        self.no_device_warning = QLabel(
+        # No device warning (initially hidden) - using InfoLabel with custom warning styling
+        self.no_device_warning = InfoLabel(
             "⚠️ No microphone detected. Please connect a microphone and click Refresh.\n"
-            "Make sure your microphone is plugged in and enabled in system settings."
+            "Make sure your microphone is plugged in and enabled in system settings.",
+            font_size=12
         )
-        self.no_device_warning.setWordWrap(True)
+        # Override styling for warning appearance
         self.no_device_warning.setStyleSheet(f"color: {ColorTokens.TEXT_PRIMARY}; font-size: 12px; padding: 12px; background-color: #ffebee; border: 1px solid #f44336; border-radius: 6px;")
         self.no_device_warning.hide()
-        device_layout.addRow(self.no_device_warning)
+        device_section.layout().addRow(self.no_device_warning)
         
-        layout.addWidget(device_group)
+        layout.addWidget(device_section)
         
-        # Tone Files Group
-        tones_group = QGroupBox("Tone Files")
-        tones_layout = self.create_group_layout(tones_group, "form")
+        # Tone Files Section
+        tones_section = SettingsSection("Tone Files", layout_type="form")
         
         # Start tone
         start_tone_layout = self.create_horizontal_layout()
@@ -520,7 +578,7 @@ class PreferencesDialog(BaseDialog):
         start_tone_layout.addWidget(self.start_tone_edit)
         start_tone_layout.addWidget(start_tone_browse)
         start_tone_layout.addWidget(start_tone_test)
-        tones_layout.addRow("Start Tone:", start_tone_layout)
+        tones_section.layout().addRow("Start Tone:", start_tone_layout)
         
         # Stop tone
         stop_tone_layout = self.create_horizontal_layout()
@@ -532,89 +590,79 @@ class PreferencesDialog(BaseDialog):
         stop_tone_layout.addWidget(self.stop_tone_edit)
         stop_tone_layout.addWidget(stop_tone_browse)
         stop_tone_layout.addWidget(stop_tone_test)
-        tones_layout.addRow("Stop Tone:", stop_tone_layout)
+        tones_section.layout().addRow("Stop Tone:", stop_tone_layout)
         
-        layout.addWidget(tones_group)
+        layout.addWidget(tones_section)
         
         layout.addStretch()
         self.tab_widget.addTab(tab, "Audio")
     
     def create_transcription_tab(self):
-        """Create the Transcription tab."""
+        """Create the Transcription tab using unified components."""
         tab = QWidget()
         layout = self.create_tab_layout(tab)
         
-        # Whisper Settings Group
-        whisper_group = QGroupBox("Whisper Model Settings")
-        whisper_layout = self.create_group_layout(whisper_group, "form")
+        # Whisper Settings Section
+        whisper_section = SettingsSection("Whisper Model Settings", layout_type="form")
         
         # Model selection
-        self.model_combo = QComboBox()
-        self.model_combo.addItems(["tiny", "base", "small", "medium", "large"])
-        whisper_layout.addRow("Model Size:", self.model_combo)
+        self.model_combo = self.create_styled_combobox(["tiny", "base", "small", "medium", "large"])
+        whisper_section.layout().addRow("Model Size:", self.model_combo)
         
         # Model info
-        model_info = QLabel(
+        model_info = InfoLabel(
             "• tiny: Fastest, least accurate (~39 MB)\n"
             "• base: Fast, good accuracy (~74 MB)\n"
             "• small: Balanced speed/accuracy (~244 MB)\n"
             "• medium: Slower, better accuracy (~769 MB)\n"
             "• large: Slowest, most accurate (~1550 MB)"
         )
-        model_info.setWordWrap(True)
-        model_info.setStyleSheet(f"color: {ColorTokens.TEXT_SECONDARY}; font-size: 12px; padding: 12px; background-color: transparent; border-radius: 6px;")
-        whisper_layout.addRow("Model Info:", model_info)
+        whisper_section.layout().addRow(model_info)
         
         # Speed mode
         self.speed_mode_checkbox = QCheckBox("Enable speed optimizations")
-        whisper_layout.addRow(self.speed_mode_checkbox)
+        whisper_section.layout().addRow(self.speed_mode_checkbox)
         
-        layout.addWidget(whisper_group)
+        layout.addWidget(whisper_section)
         
-        # Performance Settings Group
-        perf_group = QGroupBox("Performance Settings")
-        perf_layout = self.create_group_layout(perf_group, "vertical")
+        # Performance Settings Section (vertical layout)
+        perf_section = SettingsSection("Performance Settings", layout_type="vertical")
         
         # Performance info
-        perf_info = QLabel(
+        perf_info = InfoLabel(
             "For best performance:\n"
             "• Use 'tiny' or 'base' models for real-time transcription\n"
             "• Set temperature to 0.0 for fastest results\n"
             "• Enable speed optimizations\n"
             "• Close other applications to free up memory"
         )
-        perf_info.setWordWrap(True)
-        perf_info.setStyleSheet(f"color: {ColorTokens.TEXT_SECONDARY}; font-size: 12px; padding: 12px; background-color: transparent; border-radius: 6px;")
-        perf_layout.addWidget(perf_info)
+        perf_section.layout().addWidget(perf_info)
         
-        layout.addWidget(perf_group)
+        layout.addWidget(perf_section)
         
         layout.addStretch()
         self.tab_widget.addTab(tab, "Transcription")
     
     
     def create_advanced_tab(self):
-        """Create the Advanced tab."""
+        """Create the Advanced tab using unified components."""
         tab = QWidget()
         layout = self.create_tab_layout(tab)
         
-        # Expert Mode Group
-        expert_group = QGroupBox("Expert Settings")
-        expert_layout = self.create_group_layout(expert_group, "form")
+        # Expert Settings Section
+        expert_section = SettingsSection("Expert Settings", layout_type="form")
         
         # Expert mode toggle
         self.expert_mode_checkbox = QCheckBox("Enable Expert Mode")
-        expert_layout.addRow(self.expert_mode_checkbox)
+        expert_section.layout().addRow(self.expert_mode_checkbox)
         
         # Expert mode info
-        expert_info = QLabel(
+        expert_info = InfoLabel(
             "Expert Mode reveals advanced settings that most users don't need to change.\n"
             "These settings can affect performance and accuracy but require technical knowledge.\n"
             "When disabled, advanced settings are reset to recommended values."
         )
-        expert_info.setWordWrap(True)
-        expert_info.setStyleSheet(f"color: {ColorTokens.TEXT_SECONDARY}; font-size: 12px; padding: 12px; background-color: transparent; border-radius: 6px;")
-        expert_layout.addRow("Expert Mode Info:", expert_info)
+        expert_section.layout().addRow(expert_info)
         
         # Reset to recommended button
         self.reset_recommended_button = QPushButton("Reset to Recommended")
@@ -632,13 +680,13 @@ class PreferencesDialog(BaseDialog):
                 background-color: {ColorTokens.BUTTON_SECONDARY_HOVER};
             }}
         """)
-        expert_layout.addRow("", self.reset_recommended_button)
+        expert_section.layout().addRow("", self.reset_recommended_button)
         
-        layout.addWidget(expert_group)
+        layout.addWidget(expert_section)
         
-        # Temperature Settings Group (initially hidden)
-        self.temperature_group = QGroupBox("Transcription Temperature")
-        self.temperature_layout = self.create_group_layout(self.temperature_group, "form")
+        # Temperature Settings Section (initially hidden - kept as QGroupBox for visibility control)
+        self.temperature_group = SettingsSection("Transcription Temperature", layout_type="form")
+        self.temperature_layout = self.temperature_group.layout()
         
         # Temperature setting
         temp_layout = self.create_horizontal_layout()
@@ -655,34 +703,29 @@ class PreferencesDialog(BaseDialog):
         self.temperature_layout.addRow("Temperature:", temp_layout)
         
         # Temperature info
-        temp_info = QLabel(
+        temp_info = InfoLabel(
             "Controls randomness in transcription:\n"
             "• 0.0: Most deterministic, fastest (recommended)\n"
             "• 0.5: Balanced\n"
             "• 1.0: Most creative, slowest\n\n"
             "Most users should leave this at 0.0 for best performance."
         )
-        temp_info.setWordWrap(True)
-        temp_info.setStyleSheet(f"color: {ColorTokens.TEXT_SECONDARY}; font-size: 12px; padding: 12px; background-color: transparent; border-radius: 6px;")
-        self.temperature_layout.addRow("Temperature Info:", temp_info)
+        self.temperature_layout.addRow(temp_info)
         
         layout.addWidget(self.temperature_group)
         self.temperature_group.hide()  # Initially hidden
         
-        # Advanced Settings Group
-        advanced_group = QGroupBox("Advanced Settings")
-        advanced_layout = self.create_group_layout(advanced_group, "vertical")
+        # Advanced Settings Section
+        advanced_section = SettingsSection("Advanced Settings", layout_type="vertical")
         
         # Settings file info
-        settings_info = QLabel(
+        settings_info = InfoLabel(
             f"Settings are stored in:\n{self.settings_manager.get_settings_file_path()}\n\n"
             "You can manually edit this file if needed. Settings are automatically saved when changed."
         )
-        settings_info.setWordWrap(True)
-        settings_info.setStyleSheet(f"color: {ColorTokens.TEXT_SECONDARY}; font-size: 12px; padding: 12px; background-color: transparent; border-radius: 6px;")
-        advanced_layout.addWidget(settings_info)
+        advanced_section.layout().addWidget(settings_info)
         
-        layout.addWidget(advanced_group)
+        layout.addWidget(advanced_section)
         
         layout.addStretch()
         self.tab_widget.addTab(tab, "Advanced")
@@ -699,7 +742,7 @@ class PreferencesDialog(BaseDialog):
             # General settings
             self.theme_combo.setCurrentText(self.current_settings.get("ui/theme", "system"))
             self.language_combo.setCurrentText(self.current_settings.get("whisper/language", "auto"))
-            self.engine_combo.setCurrentText(self.current_settings.get("whisper/engine", "openai"))
+            self.engine_combo.setCurrentText(self.current_settings.get("whisper/engine", "faster"))
             
             # Behavior settings
             self.auto_paste_checkbox.setChecked(self.current_settings.get("behavior/auto_paste", True))

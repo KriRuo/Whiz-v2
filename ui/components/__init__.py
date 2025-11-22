@@ -9,7 +9,9 @@ from .base_components import (
     StatusDisplay,
     ActionButton,
     InfoPanel,
-    ButtonGroup
+    ButtonGroup,
+    SettingsSection,
+    InfoLabel
 )
 from .mic_circle import AnimationCircleWidget
 
@@ -20,5 +22,7 @@ __all__ = [
     'ActionButton',
     'InfoPanel',
     'ButtonGroup',
+    'SettingsSection',
+    'InfoLabel',
     'AnimationCircleWidget'
 ]

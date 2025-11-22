@@ -84,8 +84,14 @@ class MainStyles:
             
             /* Labels */
             QLabel {{
-                color: {ColorTokens.TEXT_PRIMARY};
+                color: {ColorTokens.TEXT_PRIMARY} !important;
                 font-size: {font_lg}px;
+                background: transparent;
+            }}
+            
+            /* Force all labels in form layouts to use correct color */
+            QFormLayout QLabel {{
+                color: {ColorTokens.TEXT_PRIMARY} !important;
             }}
             
             /* Status Labels */
@@ -248,8 +254,27 @@ class MainStyles:
             QComboBox QAbstractItemView {{
                 background-color: {ColorTokens.BG_SECONDARY};
                 border: 1px solid {ColorTokens.BORDER_SUBTLE};
-                color: {ColorTokens.TEXT_PRIMARY};
+                color: {ColorTokens.TEXT_PRIMARY} !important;
                 selection-background-color: {ColorTokens.ACCENT_PRIMARY};
+                selection-color: {ColorTokens.TEXT_PRIMARY} !important;
+                padding: 4px;
+            }}
+            
+            QComboBox::item {{
+                color: {ColorTokens.TEXT_PRIMARY} !important;
+                background-color: transparent;
+                padding: 6px 12px;
+                min-height: 24px;
+            }}
+            
+            QComboBox::item:selected {{
+                background-color: {ColorTokens.ACCENT_PRIMARY};
+                color: {ColorTokens.TEXT_PRIMARY} !important;
+            }}
+            
+            QComboBox::item:hover {{
+                background-color: {ColorTokens.BG_TERTIARY};
+                color: {ColorTokens.TEXT_PRIMARY} !important;
             }}
             
             /* Button Styling - Dark theme */
@@ -293,8 +318,14 @@ class MainStyles:
             QLabel {{
                 font-family: "Inter","Segoe UI",system-ui,-apple-system;
                 font-size: 13px;
-                color: {ColorTokens.TEXT_PRIMARY};
+                color: {ColorTokens.TEXT_PRIMARY} !important;
                 line-height: 1.4;
+                background: transparent;
+            }}
+            
+            /* Force all labels in form layouts to use correct color */
+            QFormLayout QLabel {{
+                color: {ColorTokens.TEXT_PRIMARY} !important;
             }}
             
             /* Checkbox Styling - Dark theme */
@@ -367,11 +398,11 @@ class MainStyles:
     def get_dark_theme_addition():
         """Provide additional dark theme styles for backward compatibility tests."""
         # Reuse main stylesheet additions that darken components
-        return """
+        return f"""
             /* Additional dark theme cues (legacy tests expect this API) */
-            QMainWindow { background: #1a1d24; background-color: #1a1d24; }
-            QWidget { background: #1a1d24; background-color: #1a1d24; }
-            QLabel { color: #e4e6eb; }
+            QMainWindow {{ background: {ColorTokens.BG_PRIMARY}; background-color: {ColorTokens.BG_PRIMARY}; }}
+            QWidget {{ background: {ColorTokens.BG_PRIMARY}; background-color: {ColorTokens.BG_PRIMARY}; }}
+            QLabel {{ color: {ColorTokens.TEXT_PRIMARY} !important; }}
         """
 
     @staticmethod

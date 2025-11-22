@@ -1,16 +1,16 @@
 /* Dark theme tokens */
 QMainWindow { background: #0E1116; }
-* { color: #E6EAF2; font-family: "Inter","Segoe UI",system-ui,-apple-system; font-size: 13px; }
+* { color: #FFFFFF; font-family: "Inter","Segoe UI",system-ui,-apple-system; font-size: 13px; }
 
 #TopBar { background: transparent; }
-#AppTitle { font-size: 18px; font-weight: 600; color: #E6EAF2; }
+#AppTitle { font-size: 18px; font-weight: 600; color: #FFFFFF; }
 QToolButton { background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.08); border-radius: 8px; padding: 6px; }
 QToolButton:hover { background: rgba(255,255,255,.10); }
 #CloseButton { background: rgba(244,63,94,.14); border-color: rgba(244,63,94,.22); }
 #CloseButton:hover { background: rgba(244,63,94,.22); }
 
 #MicCard, #TranscriptExpander { background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.06); border-radius: 20px; }
-#StatusSubtle, #TranscriptTitle { color: #A8B0BD; font-size: 12px; }
+#StatusSubtle, #TranscriptTitle { color: #B8BFC8; font-size: 12px; }
 
 QPushButton { height: 44px; padding: 0 18px; border-radius: 12px; border: 1px solid rgba(255,255,255,.06); background: rgba(255,255,255,.06); font-size: 14px; font-weight: 600; }
 QPushButton:hover { background: rgba(255,255,255,.10); }

@@ -142,7 +142,7 @@ def main():
             auto_paste=settings.get("behavior/auto_paste", True),  # Use saved auto-paste setting
             language=settings.get("whisper/language", None),  # Use saved language or auto-detect
             temperature=settings.get("whisper/temperature", 0.0),  # Default to fastest temperature
-            engine=settings.get("whisper/engine", "openai")  # Default to openai engine
+            engine=settings.get("whisper/engine", "faster")  # Default to faster-whisper engine (5-10x faster)
         )
         
         # Check if controller initialized successfully

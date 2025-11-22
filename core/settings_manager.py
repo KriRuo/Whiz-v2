@@ -512,6 +512,13 @@ class SettingsManager:
             if hasattr(main_window, 'controller'):
                 controller = main_window.controller
                 
+                # Update engine if it has changed
+                new_engine = settings.get("whisper/engine", "faster")
+                if hasattr(controller, 'engine') and controller.engine != new_engine:
+                    controller.engine = new_engine
+                    logger.info(f"Engine updated to {new_engine}")
+                    # Note: Model will be reloaded on next transcription with the new engine
+                
                 # Update model if it has changed
                 new_model = settings.get("whisper/model_name", "tiny")
                 if hasattr(controller, 'model_size') and controller.model_size != new_model:
