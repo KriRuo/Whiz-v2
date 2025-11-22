@@ -86,9 +86,12 @@ class TestAudioSettings(unittest.TestCase):
         self.settings_manager.set("audio/effects_enabled", "maybe")
         self.assertTrue(self.settings_manager.get("audio/effects_enabled"))  # Should default to True
         
-        # Test tone path validation
+        # Test tone path validation - invalid value should use default
         self.settings_manager.set("audio/start_tone", None)
-        self.assertEqual(self.settings_manager.get("audio/start_tone"), "None")  # None becomes "None" string
+        result = self.settings_manager.get("audio/start_tone")
+        # Should get default value (assets/sound_start_v9.wav) since None is invalid
+        self.assertIsNotNone(result)
+        self.assertTrue(result.endswith('.wav'))
     
     def test_audio_settings_persistence(self):
         """Test that audio settings persist across sessions."""

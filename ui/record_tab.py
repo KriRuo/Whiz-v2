@@ -21,17 +21,10 @@ class RecordTab(BaseTab):
         responsive_spacing = AdaptiveSpacing.get_spacing(LayoutTokens.SPACING_XS)
         self.main_layout.setSpacing(responsive_spacing)
         self.main_layout.setContentsMargins(0, 0, 0, 0)
-        
-        # DEBUG: Add visible background to see the tab boundaries
-        self.setStyleSheet("RecordTab { background-color: rgba(255, 0, 0, 30); }")
 
     def init_content(self):
         """Initialize the record tab content using responsive layout system."""
         from PyQt5.QtWidgets import QSpacerItem, QSizePolicy
-        
-        # DEBUG: Print layout info
-        print(f"RecordTab margins: {self.main_layout.contentsMargins()}")
-        print(f"RecordTab geometry: {self.geometry()}")
         
         # Get responsive spacing values
         top_spacing = AdaptiveSpacing.get_spacing(20)  # Fixed top spacing
@@ -47,9 +40,6 @@ class RecordTab(BaseTab):
         # Animated circle (now responsive) - centered using horizontal layout
         self.animation_circle = AnimationCircleWidget()
         
-        # DEBUG: Add visible border to animation circle
-        self.animation_circle.setStyleSheet("AnimationCircleWidget { border: 2px solid yellow; }")
-        
         # Create horizontal layout for proper centering
         circle_h_layout = QHBoxLayout()
         circle_h_layout.setSpacing(0)
@@ -59,10 +49,6 @@ class RecordTab(BaseTab):
         circle_h_layout.addStretch()
         
         self.main_layout.addLayout(circle_h_layout)
-        
-        # DEBUG: Print animation circle info after adding
-        print(f"Animation circle size: {self.animation_circle.size()}")
-        print(f"Animation circle geometry: {self.animation_circle.geometry()}")
         
         # Add spacing between animation circle and buttons using a fixed-height widget
         spacer_widget = QWidget()

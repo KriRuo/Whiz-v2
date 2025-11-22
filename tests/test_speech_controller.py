@@ -171,16 +171,19 @@ class TestSpeechController(unittest.TestCase):
             self.assertEqual(self.controller.model, mock_model)
     
     def test_ensure_model_loaded_failure(self):
-        """Test model loading failure"""
-        with patch('faster_whisper.WhisperModel') as mock_whisper_class:
-            mock_whisper_class.side_effect = Exception("Model load failed")
-            
-            result = self.controller._ensure_model_loaded()
-            
-            self.assertFalse(result)
-            self.assertFalse(self.controller.model_loaded)
-            self.assertFalse(self.controller.model_loading)
-            self.assertEqual(self.controller.model_load_error, "Unexpected error: Model load failed")
+        """Test model loading failure with fallback"""
+        # Patch both faster_whisper and openai-whisper to fail
+        with patch('faster_whisper.WhisperModel') as mock_faster_whisper:
+            with patch('whisper.load_model') as mock_openai_whisper:
+                mock_faster_whisper.side_effect = Exception("Model load failed")
+                mock_openai_whisper.side_effect = Exception("Fallback also failed")
+                
+                result = self.controller._ensure_model_loaded()
+                
+                self.assertFalse(result)
+                self.assertFalse(self.controller.model_loaded)
+                self.assertFalse(self.controller.model_loading)
+                self.assertIsNotNone(self.controller.model_load_error)
     
     def test_ensure_model_loaded_already_loaded(self):
         """Test _ensure_model_loaded when model is already loaded"""
@@ -296,8 +299,10 @@ class TestSpeechController(unittest.TestCase):
     
     def test_audio_path_setting(self):
         """Test that audio path is set correctly"""
-        expected_path = os.path.join(self.controller.temp_dir, "current_audio.wav")
-        self.assertEqual(self.controller.audio_path, expected_path)
+        # Audio path now uses random filenames (whiz_*.wav) for safety
+        self.assertTrue(self.controller.audio_path.startswith(self.controller.temp_dir))
+        self.assertTrue(self.controller.audio_path.endswith('.wav'))
+        self.assertTrue('whiz_' in os.path.basename(self.controller.audio_path))
 
 
 class TestSpeechControllerIntegration(unittest.TestCase):

@@ -234,7 +234,7 @@ class TestSplashScreenIntegration(unittest.TestCase):
             self.splash.close()
             self.splash = None
             
-    @patch('splash_screen.SpeechApp')
+    @patch('speech_ui.SpeechApp')  # SpeechApp is in speech_ui.py, not splash_screen.py
     @patch('splash_screen.SettingsManager')
     @patch('core.platform_features.PlatformFeatures')
     @patch('core.audio_manager.AudioManager')
