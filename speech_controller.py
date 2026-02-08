@@ -378,6 +378,20 @@ class SpeechController:
             "recommendations": self.platform_features.get_recommendations()
         }
 
+    def _update_transcription_config(self, model_size: str = None, engine: str = None,
+                                     language: str = None, temperature: float = None):
+        """Helper method to update transcription service configuration"""
+        new_config = TranscriptionConfig(
+            model_size=model_size or self.transcription_service.config.model_size,
+            engine=engine or self.transcription_service.config.engine,
+            language=language or self.transcription_service.config.language,
+            temperature=temperature if temperature is not None else self.transcription_service.config.temperature
+        )
+        old_service = self.transcription_service
+        self.transcription_service = TranscriptionService(new_config)
+        self.transcription_service.set_status_callback(self._update_status)
+        old_service.unload_model()
+
     def set_auto_paste(self, enabled: bool):
         """Enable or disable auto-paste functionality"""
         self.auto_paste = enabled
@@ -385,54 +399,25 @@ class SpeechController:
 
     def set_language(self, lang_code: str):
         """Set the language for transcription"""
-        # Update transcription service configuration
-        new_config = TranscriptionConfig(
-            model_size=self.transcription_service.config.model_size,
-            engine=self.transcription_service.config.engine,
-            language=lang_code,
-            temperature=self.transcription_service.config.temperature
-        )
-        old_service = self.transcription_service
-        self.transcription_service = TranscriptionService(new_config)
-        self.transcription_service.set_status_callback(self._update_status)
-        old_service.unload_model()
+        self._update_transcription_config(language=lang_code)
         logger.info(f"Language set to: {lang_code}")
 
     def set_temperature(self, temperature: float):
         """Set the temperature for transcription (0.0 = deterministic, higher = more random)"""
         temperature = max(0.0, min(1.0, temperature))  # Clamp between 0.0 and 1.0
-        # Update transcription service configuration
-        new_config = TranscriptionConfig(
-            model_size=self.transcription_service.config.model_size,
-            engine=self.transcription_service.config.engine,
-            language=self.transcription_service.config.language,
-            temperature=temperature
-        )
-        old_service = self.transcription_service
-        self.transcription_service = TranscriptionService(new_config)
-        self.transcription_service.set_status_callback(self._update_status)
-        old_service.unload_model()
+        self._update_transcription_config(temperature=temperature)
         logger.info(f"Temperature set to: {temperature}")
     
     def set_model(self, model_size: str):
         """Change the Whisper model dynamically"""
-        # Update transcription service configuration
-        new_config = TranscriptionConfig(
-            model_size=model_size,
-            engine=self.transcription_service.config.engine,
-            language=self.transcription_service.config.language,
-            temperature=self.transcription_service.config.temperature
-        )
-        old_service = self.transcription_service
-        self.transcription_service = TranscriptionService(new_config)
-        self.transcription_service.set_status_callback(self._update_status)
-        old_service.unload_model()
+        self._update_transcription_config(model_size=model_size)
         logger.info(f"Model changed to {model_size}")
     
     def set_speed_mode(self, enabled: bool):
-        """Enable or disable speed optimizations"""
-        # Note: speed_mode is handled internally by TranscriptionService via config
-        logger.info(f"Speed mode {'enabled' if enabled else 'disabled'}")
+        """Enable or disable speed optimizations (for backward compatibility)"""
+        # Note: Speed optimizations are now handled internally by TranscriptionService
+        # This method is kept for backward compatibility but doesn't change behavior
+        logger.info(f"Speed mode {'enabled' if enabled else 'disabled'} (managed by TranscriptionService)")
 
     def set_toggle_mode(self, enabled: bool):
         """Enable or disable toggle mode"""
