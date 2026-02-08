@@ -516,3 +516,90 @@ class TranscriptionService:
             "model_size": self.config.model_size,
             "language": self.config.language
         }
+    
+    def health_check(self) -> Dict[str, Any]:
+        """
+        Perform health check on the transcription service.
+        
+        Returns:
+            Dictionary with health status information
+        """
+        from .service_health import HealthStatus, HealthCheckResult
+        
+        # Check if we can load the model
+        if self.model_load_error:
+            result = HealthCheckResult(
+                status=HealthStatus.UNHEALTHY,
+                service_name="TranscriptionService",
+                message=f"Model loading failed: {self.model_load_error}",
+                details={"error": self.model_load_error}
+            )
+        elif self.model_loaded:
+            result = HealthCheckResult(
+                status=HealthStatus.HEALTHY,
+                service_name="TranscriptionService",
+                message="Model loaded and ready",
+                details={
+                    "engine": self.config.engine,
+                    "model_size": self.config.model_size,
+                    "cuda_available": self._cuda_available
+                }
+            )
+        elif self.model_loading:
+            result = HealthCheckResult(
+                status=HealthStatus.DEGRADED,
+                service_name="TranscriptionService",
+                message="Model is currently loading",
+                details={"status": "loading"}
+            )
+        else:
+            result = HealthCheckResult(
+                status=HealthStatus.HEALTHY,
+                service_name="TranscriptionService",
+                message="Service ready, model not loaded (lazy loading)",
+                details={"status": "ready"}
+            )
+        
+        return result.to_dict()
+    
+    def readiness_check(self) -> Dict[str, Any]:
+        """
+        Check if service is ready to accept requests.
+        
+        Returns:
+            Dictionary with readiness status
+        """
+        from .service_health import ReadinessStatus, ReadinessCheckResult
+        
+        # Check engine availability
+        self._check_engine_availability()
+        
+        # Determine if service is ready
+        engine_available = (
+            (self.config.engine == "faster" and self._faster_whisper_available) or
+            (self.config.engine == "openai" and self._openai_whisper_available)
+        )
+        
+        if not engine_available:
+            result = ReadinessCheckResult(
+                status=ReadinessStatus.NOT_READY,
+                service_name="TranscriptionService",
+                message=f"Engine '{self.config.engine}' is not available",
+                dependencies_ready=False
+            )
+        elif self.model_loading:
+            result = ReadinessCheckResult(
+                status=ReadinessStatus.INITIALIZING,
+                service_name="TranscriptionService",
+                message="Model is loading",
+                dependencies_ready=True
+            )
+        else:
+            result = ReadinessCheckResult(
+                status=ReadinessStatus.READY,
+                service_name="TranscriptionService",
+                message="Service is ready to accept requests",
+                dependencies_ready=True
+            )
+        
+        return result.to_dict()

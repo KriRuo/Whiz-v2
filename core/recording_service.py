@@ -418,3 +418,88 @@ class RecordingService:
             "sample_rate": self.config.sample_rate,
             "channels": self.config.channels
         }
+    
+    def health_check(self) -> Dict[str, Any]:
+        """
+        Perform health check on the recording service.
+        
+        Returns:
+            Dictionary with health status information
+        """
+        from .service_health import HealthStatus, HealthCheckResult
+        
+        # Check if audio is available
+        if not self.audio_manager.is_available():
+            result = HealthCheckResult(
+                status=HealthStatus.UNHEALTHY,
+                service_name="RecordingService",
+                message="Audio system is not available",
+                details={"audio_available": False}
+            )
+        elif self.state == RecordingState.ERROR:
+            result = HealthCheckResult(
+                status=HealthStatus.UNHEALTHY,
+                service_name="RecordingService",
+                message="Service is in error state",
+                details={"state": self.state.value}
+            )
+        elif self.state == RecordingState.RECORDING:
+            result = HealthCheckResult(
+                status=HealthStatus.HEALTHY,
+                service_name="RecordingService",
+                message="Recording in progress",
+                details={
+                    "state": self.state.value,
+                    "duration": self.get_recording_duration()
+                }
+            )
+        else:
+            result = HealthCheckResult(
+                status=HealthStatus.HEALTHY,
+                service_name="RecordingService",
+                message="Service is healthy and ready",
+                details={"state": self.state.value}
+            )
+        
+        return result.to_dict()
+    
+    def readiness_check(self) -> Dict[str, Any]:
+        """
+        Check if service is ready to accept requests.
+        
+        Returns:
+            Dictionary with readiness status
+        """
+        from .service_health import ReadinessStatus, ReadinessCheckResult
+        
+        # Check if audio system is available
+        if not self.audio_manager.is_available():
+            result = ReadinessCheckResult(
+                status=ReadinessStatus.NOT_READY,
+                service_name="RecordingService",
+                message="Audio system is not available",
+                dependencies_ready=False
+            )
+        elif self.state == RecordingState.ERROR:
+            result = ReadinessCheckResult(
+                status=ReadinessStatus.NOT_READY,
+                service_name="RecordingService",
+                message="Service is in error state",
+                dependencies_ready=True
+            )
+        elif self.state == RecordingState.STOPPING:
+            result = ReadinessCheckResult(
+                status=ReadinessStatus.INITIALIZING,
+                service_name="RecordingService",
+                message="Recording is being stopped",
+                dependencies_ready=True
+            )
+        else:
+            result = ReadinessCheckResult(
+                status=ReadinessStatus.READY,
+                service_name="RecordingService",
+                message="Service is ready to accept requests",
+                dependencies_ready=True
+            )
+        
+        return result.to_dict()

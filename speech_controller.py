@@ -13,49 +13,30 @@ from datetime import datetime
 
 # Import our abstraction layers
 from core.hotkey_manager import HotkeyManager, HotkeyMode
-from core.audio_manager import AudioManager
 from core.platform_features import PlatformFeatures, FeatureStatus
 from core.logging_config import get_logger
 from core.performance_monitor import get_performance_monitor
 from core.path_validation import get_sandbox, create_safe_temp_file
-from core.transcription_exceptions import (
-    TranscriptionException, ModelLoadingError, AudioProcessingError, 
-    WhisperError, FileIOError, TranscriptionTimeoutError,
-    with_retry, classify_exception, get_retry_manager
-)
 from core.cleanup_manager import (
     CleanupManager, CleanupPhase, register_cleanup_task, get_cleanup_manager
 )
 from core.config import TIMEOUT_CONFIG, WHISPER_CONFIG, AUDIO_CONFIG, MEMORY_CONFIG
 
-logger = get_logger(__name__)
+# Import new services
+from core.transcription_service import TranscriptionService, TranscriptionConfig
+from core.recording_service import RecordingService, RecordingConfig
 
-# Whisper engine availability flags (set lazily when needed)
-WHISPER_AVAILABLE = False
-FASTER_WHISPER_AVAILABLE = False
-CUDA_AVAILABLE = False
+logger = get_logger(__name__)
 
 class SpeechController:
     def __init__(self, hotkey: str = "alt gr", model_size: str = "tiny", auto_paste: bool = True, 
                  language: str = None, temperature: float = 0.5, engine: str = None):
-        self.model_size = model_size
+        # Basic settings
         self.auto_paste = auto_paste
-        self.language = language if language is not None else "auto"
-        self.temperature = temperature
-        self.engine = (engine or WHISPER_CONFIG.DEFAULT_ENGINE).lower()  # Use config default if None
-        self.speed_mode = True  # Enable speed optimizations by default
         self.toggle_mode = False  # Default to hold mode
         self.listening = False
-        self.listen_thread = None
-        self.recording_frames = []
         self.transcript_log: List[Dict] = []
         self.transcript_callback: Optional[Callable] = None
-        self.recording_stream = None
-        
-        # Audio recording parameters
-        self.CHUNK = 2048  # Match tests' expected chunk size
-        self.CHANNELS = 1
-        self.RATE = 16000  # Whisper's optimal sample rate
         
         # Initialize performance monitoring
         self.performance_monitor = get_performance_monitor()
@@ -63,15 +44,6 @@ class SpeechController:
         # Initialize platform features detection (needed before hotkey registration)
         self.platform_features = PlatformFeatures()
         self.features = self.platform_features.detect_all_features()
-
-        # Initialize managers
-        self.hotkey_manager = HotkeyManager()
-        self.audio_manager = AudioManager(
-            sample_rate=self.RATE,
-            channels=self.CHANNELS,
-            chunk_size=self.CHUNK
-        )
-        self.hotkey = hotkey  # Store original hotkey for compatibility
         
         # Visual indicator settings
         self.visual_indicator_enabled = True
@@ -82,29 +54,29 @@ class SpeechController:
         # Recording state callback (bool)
         self.recording_state_callback: Optional[Callable[[bool], None]] = None
 
-        # Create temporary directory and audio file path using sandbox
-        sandbox = get_sandbox()
-        self.temp_dir = str(sandbox.temp_dir)
-        self.audio_path = str(create_safe_temp_file(suffix='.wav'))
-        logger.info(f"Using temporary directory: {self.temp_dir}")
-        logger.info(f"Using sandboxed audio path: {self.audio_path}")
-
-        # Whisper model - lazy loading for faster startup
-        self.model_size = model_size
-        self.model = None  # Will be loaded on first use
-        self.model_loading = False
-        self.model_loaded = False
-        self.model_load_error = None
+        # Initialize TranscriptionService
+        transcription_config = TranscriptionConfig(
+            model_size=model_size,
+            engine=engine or WHISPER_CONFIG.DEFAULT_ENGINE,
+            language=language or "auto",
+            temperature=temperature
+        )
+        self.transcription_service = TranscriptionService(transcription_config)
+        self.transcription_service.set_status_callback(self._update_status)
         
-        # Thread safety for model loading
-        self._model_lock = threading.Lock()
-        self._model_condition = threading.Condition(self._model_lock)
-        self._pending_transcriptions = []  # Queue for pending transcription requests
+        # Initialize RecordingService
+        recording_config = RecordingConfig(
+            sample_rate=16000,
+            channels=1,
+            chunk_size=2048
+        )
+        self.recording_service = RecordingService(recording_config)
+        self.recording_service.set_status_callback(self._update_status)
+        self.recording_service.set_state_change_callback(self._on_recording_state_change)
         
-        logger.info(f"Whisper {model_size} model ({self.engine} engine) will be loaded on first recording.")
-
-        # Set up audio manager
-        self._setup_audio_manager()
+        # Initialize hotkey manager
+        self.hotkey_manager = HotkeyManager()
+        self.hotkey = hotkey  # Store original hotkey for compatibility
         
         # Set up hotkey manager
         self._setup_hotkey_manager()
@@ -118,16 +90,47 @@ class SpeechController:
         
         logger.info("SpeechController initialized successfully")
     
+    # Backward compatibility properties
+    @property
+    def model_size(self) -> str:
+        """Get current model size"""
+        return self.transcription_service.config.model_size
+    
+    @property
+    def engine(self) -> str:
+        """Get current transcription engine"""
+        return self.transcription_service.config.engine
+    
+    @property
+    def language(self) -> str:
+        """Get current language setting"""
+        return self.transcription_service.config.language
+    
+    @property
+    def temperature(self) -> float:
+        """Get current temperature setting"""
+        return self.transcription_service.config.temperature
+    
     def _register_cleanup_tasks(self):
         """Register cleanup tasks with the cleanup manager"""
-        # Audio resources cleanup
+        # Recording service cleanup
         register_cleanup_task(
-            "audio_manager_cleanup",
+            "recording_service_cleanup",
             CleanupPhase.AUDIO_RESOURCES,
-            self._cleanup_audio_manager,
-            self._verify_audio_cleanup,
+            self._cleanup_recording_service,
+            self._verify_recording_cleanup,
             timeout=5.0,
             critical=True
+        )
+        
+        # Transcription service cleanup
+        register_cleanup_task(
+            "transcription_service_cleanup",
+            CleanupPhase.MODEL_RESOURCES,
+            self._cleanup_transcription_service,
+            self._verify_transcription_cleanup,
+            timeout=10.0,
+            critical=False
         )
         
         # Hotkey resources cleanup
@@ -140,44 +143,23 @@ class SpeechController:
             critical=True
         )
         
-        # Model resources cleanup
-        register_cleanup_task(
-            "model_cleanup",
-            CleanupPhase.MODEL_RESOURCES,
-            self._cleanup_model,
-            self._verify_model_cleanup,
-            timeout=10.0,
-            critical=False
-        )
-        
-        # File resources cleanup
-        register_cleanup_task(
-            "file_cleanup",
-            CleanupPhase.FILE_RESOURCES,
-            self._cleanup_files,
-            self._verify_file_cleanup,
-            timeout=5.0,
-            critical=False
-        )
-        
         logger.info("Cleanup tasks registered successfully")
     
-    def _setup_audio_manager(self):
-        """Set up the audio manager with callbacks"""
-        if not self.audio_manager.is_available():
-            logger.warning("Audio functionality not available on this platform")
-            return
+    def _on_recording_state_change(self, state):
+        """Handle recording state changes from RecordingService"""
+        from core.recording_service import RecordingState
         
-        # Use default device selection (will be overridden by settings if available)
-        self.audio_manager.select_device(None)
-        logger.info("Using default audio device (will be updated by settings if available)")
+        # Map RecordingState to boolean for backward compatibility
+        is_recording = (state == RecordingState.RECORDING)
+        self.listening = is_recording
         
-        # Set up callbacks
-        self.audio_manager.set_callbacks(
-            on_audio_level=self._on_audio_level
-        )
-        
-        logger.info("Audio manager initialized successfully")
+        # Notify UI
+        if self.recording_state_callback:
+            try:
+                self.recording_state_callback(is_recording)
+            except Exception:
+                pass
+    
     
     def set_audio_device(self, device_index: Optional[int] = None) -> bool:
         """
@@ -189,69 +171,11 @@ class SpeechController:
         Returns:
             True if device was set successfully, False otherwise
         """
-        if not self.audio_manager.is_available():
-            logger.error("Audio functionality not available")
-            return False
-        
-        try:
-            # Use smart device selection with fallback
-            success = self._smart_select_device(device_index)
-            
-            if success:
-                device_name = "System Default"
-                if device_index is not None:
-                    devices = self.audio_manager.get_devices()
-                    if device_index < len(devices):
-                        device_name = devices[device_index]['name']
-                logger.info(f"Audio device set to: {device_name}")
-            else:
-                logger.warning("Failed to set audio device, using default")
-            
-            return success
-            
-        except Exception as e:
-            logger.error(f"Error setting audio device: {e}")
-            return False
+        return self.recording_service.select_device(device_index)
     
-    def _smart_select_device(self, target_index: Optional[int] = None) -> bool:
-        """
-        Smart device selection with fallback strategies.
-        
-        Args:
-            target_index: Target device index, or None for system default
-            
-        Returns:
-            True if device was selected successfully, False otherwise
-        """
-        if target_index is None:
-            # Use system default
-            return self.audio_manager.select_device(None)
-        
-        try:
-            devices = self.audio_manager.get_devices()
-            if not devices:
-                logger.warning("No audio devices available")
-                return self.audio_manager.select_device(None)
-            
-            # Try exact index match first (fast path)
-            if 0 <= target_index < len(devices):
-                if self.audio_manager.select_device(target_index):
-                    return True
-                else:
-                    logger.warning(f"Device at index {target_index} failed, trying fallback")
-            
-            # Fallback to system default
-            logger.info("Falling back to system default device")
-            return self.audio_manager.select_device(None)
-            
-        except Exception as e:
-            logger.error(f"Error in smart device selection: {e}")
-            return self.audio_manager.select_device(None)
-    
-    def _on_audio_level(self, level: float):
-        """Handle audio level updates for visualization"""
-        if hasattr(self, 'audio_level_callback') and self.audio_level_callback:
-            self.audio_level_callback(level)
+    def set_audio_level_callback(self, callback: Callable[[float], None]):
+        """Set callback for audio level updates"""
+        self.recording_service.set_audio_level_callback(callback)
     
     def _setup_hotkey_manager(self):
         """Set up the hotkey manager with callbacks"""
@@ -277,325 +201,32 @@ class SpeechController:
         
         logger.info(f"Hotkey manager initialized with '{self.hotkey}' ({mode.value} mode)")
 
-    def _ensure_model_loaded(self, timeout_seconds: int = None) -> bool:
-        """
-        Ensure Whisper model is loaded, loading it if necessary.
-        
-        Args:
-            timeout_seconds: Maximum time to wait for model loading (uses config default if None)
-            
-        Returns:
-            True if model is ready, False if timeout or error
-        """
-        if timeout_seconds is None:
-            timeout_seconds = TIMEOUT_CONFIG.MODEL_LOADING_TIMEOUT
-        
-        self._model_condition.acquire()
-        lock_released = False  # Track if lock has been released
-        try:
-            # If model is already loaded, return immediately
-            if self.model_loaded:
-                return True
-            
-            # If there's a previous load error, don't try again
-            if self.model_load_error:
-                logger.warning(f"Model load previously failed: {self.model_load_error}")
-                return False
-            
-            # If model is currently loading, wait for it
-            if self.model_loading:
-                logger.info("Model is loading, waiting for completion...")
-                self._update_status("Model loading, please wait...")
-                
-                # Wait for model loading to complete with timeout
-                if not self._model_condition.wait(timeout_seconds):
-                    logger.error(f"Model loading timeout after {timeout_seconds} seconds")
-                    self._update_status("Model loading timeout")
-                    return False
-                
-                # Check if loading completed successfully
-                if self.model_loaded:
-                    logger.info("Model loading completed successfully")
-                    return True
-                elif self.model_load_error:
-                    logger.error(f"Model loading failed: {self.model_load_error}")
-                    return False
-                else:
-                    logger.error("Model loading completed but state is inconsistent")
-                    return False
-            
-            # Model is not loading, start loading it
-            logger.info("Starting model loading...")
-            self.model_loading = True
-            self._update_status(f"Loading {self.engine} Whisper model...")
-            
-            # Release the lock while loading (this is safe because we check model_loading)
-            self._model_condition.release()
-            lock_released = True  # Mark that we've released the lock
-            
-        except Exception:
-            # If any error occurs in the locked section, release before re-raising
-            if not lock_released:
-                self._model_condition.release()
-                lock_released = True
-            raise
-        finally:
-            # Ensure lock is released on all code paths (early returns, exceptions, etc.)
-            if not lock_released:
-                self._model_condition.release()
-        
-        # Now we're outside the lock, load the model
-        try:
-            # Load the model with comprehensive error handling
-            success = self._load_model_implementation()
-            
-            # Re-acquire lock to update state
-            self._model_condition.acquire()
-            try:
-                if success:
-                    self.model_loaded = True
-                    self.model_load_error = None
-                    logger.info(f"{self.engine.title()} model loaded successfully!")
-                    self._update_status(f"{self.engine.title()} model loaded successfully!")
-                else:
-                    self.model_load_error = "Model loading failed"
-                    logger.error("Model loading failed")
-                    self._update_status("Model loading failed")
-                
-                self.model_loading = False
-                
-                # Notify all waiting threads
-                self._model_condition.notify_all()
-                
-                return success
-            finally:
-                self._model_condition.release()
-                
-        except Exception as e:
-            # Re-acquire lock to update state
-            self._model_condition.acquire()
-            try:
-                self.model_loading = False
-                self.model_load_error = f"Unexpected error: {e}"
-                logger.error(f"Unexpected error loading Whisper model: {e}")
-                self._update_status(f"Error loading model: {e}")
-                
-                # Notify all waiting threads
-                self._model_condition.notify_all()
-                
-                return False
-            finally:
-                self._model_condition.release()
-    
-    @with_retry("model_loading")
-    def _load_model_implementation(self) -> bool:
-        """
-        Internal method to load the Whisper model with retry logic.
-        
-        Returns:
-            True if model loaded successfully, False otherwise
-        """
-        try:
-            logger.info(f"Loading {self.engine} Whisper {self.model_size} model... this may take a moment.")
-            
-            # Lazy import Whisper libraries to avoid startup delays
-            global WHISPER_AVAILABLE, FASTER_WHISPER_AVAILABLE, CUDA_AVAILABLE
-            
-            # Import whisper (OpenAI)
-            try:
-                import whisper
-                WHISPER_AVAILABLE = True
-                logger.debug("OpenAI Whisper imported successfully")
-            except ImportError as e:
-                logger.error(f"Failed to import OpenAI Whisper: {e}")
-                WHISPER_AVAILABLE = False
-            
-            # Import faster-whisper with fallback
-            try:
-                from faster_whisper import WhisperModel as FasterWhisperModel
-                FASTER_WHISPER_AVAILABLE = True
-                logger.debug("faster-whisper imported successfully")
-            except ImportError as e:
-                logger.debug(f"faster-whisper not available: {e}")
-                FASTER_WHISPER_AVAILABLE = False
-            
-            # Check for CUDA availability
-            try:
-                import torch
-                CUDA_AVAILABLE = torch.cuda.is_available()
-                if CUDA_AVAILABLE:
-                    logger.info(f"CUDA available with {torch.cuda.device_count()} GPU(s)")
-                else:
-                    logger.info("CUDA not available, using CPU")
-            except ImportError as e:
-                logger.warning(f"PyTorch not available: {e}")
-                CUDA_AVAILABLE = False
-            except Exception as e:
-                logger.warning(f"PyTorch initialization failed: {e}")
-                CUDA_AVAILABLE = False
-            
-            # Validate engine choice now that we know what's available
-            if self.engine == "faster" and not FASTER_WHISPER_AVAILABLE:
-                logger.warning("faster-whisper not available, falling back to openai-whisper")
-                self.engine = "openai"
-            
-            if self.engine == "openai" and not WHISPER_AVAILABLE:
-                raise ModelLoadingError("Neither faster-whisper nor OpenAI Whisper is available")
-            
-            # Check available memory before loading model
-            from core.path_validation import check_available_memory
-            try:
-                check_available_memory(MEMORY_CONFIG.MIN_AVAILABLE_MEMORY_MB)
-            except MemoryError as e:
-                logger.error(f"Cannot load model: {e}")
-                raise ModelLoadingError(str(e), e)
-            
-            # Time model loading for performance monitoring
-            with self.performance_monitor.time_operation("model_loading"):
-                # Validate model size
-                valid_models = ["tiny", "base", "small", "medium", "large"]
-                if self.model_size not in valid_models:
-                    raise ModelLoadingError(f"Invalid model size: {self.model_size}. Valid options: {valid_models}")
-                
-                # Load model based on engine with performance optimizations
-                if self.engine == "faster":
-                    if not FASTER_WHISPER_AVAILABLE:
-                        raise ModelLoadingError("faster-whisper not available")
-                    
-                    # Determine device and compute type based on availability
-                    try:
-                        if CUDA_AVAILABLE:
-                            device = "cuda"
-                            compute_type = "float16"  # Use float16 for GPU
-                            logger.info("Using GPU acceleration for faster-whisper")
-                        else:
-                            device = "cpu"
-                            compute_type = "int8"  # Use int8 for CPU
-                            logger.info("Using CPU with int8 optimization for faster-whisper")
-                    except Exception as e:
-                        logger.warning(f"CUDA detection failed, falling back to CPU: {e}")
-                        device = "cpu"
-                        compute_type = "int8"
-                        logger.info("Using CPU with int8 optimization for faster-whisper (fallback)")
-                    
-                    # Use faster-whisper with optimized settings for better performance
-                    try:
-                        logger.info(f"Instantiating FasterWhisperModel with device={device}, compute_type={compute_type}")
-                        self.model = FasterWhisperModel(
-                            self.model_size, 
-                            device=device, 
-                            compute_type=compute_type,
-                            download_root=None,  # Use default cache
-                            local_files_only=False,
-                            # Performance optimizations
-                            cpu_threads=4 if device == "cpu" else 1,  # Use multiple CPU threads only for CPU
-                            num_workers=1   # Single worker for stability
-                        )
-                        logger.info("FasterWhisperModel instantiated successfully")
-                    except Exception as e:
-                        import traceback
-                        logger.error(f"Failed to load faster-whisper model: {e}")
-                        logger.error(f"Traceback: {traceback.format_exc()}")
-                        logger.info("Falling back to OpenAI Whisper...")
-                        # Fallback to OpenAI Whisper
-                        self.engine = "openai"
-                        self.model = whisper.load_model(
-                            self.model_size,
-                            device="cpu"  # Force CPU for stability
-                        )
-                else:
-                    # Use original openai-whisper with error handling
-                    self.model = whisper.load_model(
-                        self.model_size,
-                        device="cpu",
-                        download_root=None  # Use default cache
-                    )
-                
-                # Validate model was loaded
-                if self.model is None:
-                    raise ModelLoadingError("Model loaded but is None")
-                
-                return True
-                
-        except ImportError as e:
-            raise ModelLoadingError(f"Import error: {e}", e)
-        except ValueError as e:
-            raise ModelLoadingError(f"Configuration error: {e}", e)
-        except RuntimeError as e:
-            raise ModelLoadingError(f"Runtime error: {e}", e)
-        except Exception as e:
-            transcription_exception = classify_exception(e)
-            if isinstance(transcription_exception, ModelLoadingError):
-                raise transcription_exception
-            else:
-                raise ModelLoadingError(f"Unexpected error: {e}", e)
     
     def is_model_ready(self):
         """Check if the Whisper model is ready for use"""
-        return self.model_loaded and self.model is not None
+        return self.transcription_service.is_model_loaded()
     
     def get_model_status(self):
         """Get current model loading status"""
-        if self.model_loaded:
+        status = self.transcription_service.get_status()
+        if status['model_loaded']:
             return "loaded"
-        elif self.model_loading:
+        elif status['model_loading']:
             return "loading"
-        elif self.model_load_error:
-            return f"error: {self.model_load_error}"
+        elif status['model_load_error']:
+            return f"error: {status['model_load_error']}"
         else:
             return "not_loaded"
     
     def preload_model(self):
         """Preload the Whisper model in a background thread"""
-        with self._model_condition:
-            if not self.model_loaded and not self.model_loading and not self.model_load_error:
-                # Start loading in a separate thread to avoid blocking
-                # Use daemon thread so it doesn't prevent app shutdown
-                load_thread = threading.Thread(target=self._background_load_model, daemon=True)
-                load_thread.start()
-                
-                # Update state
-                self.model_loading = True
-                self._update_status(f"Loading {self.engine} Whisper model...")
-                
-                logger.info("Started background model loading...")
-                return True
-        return False
-    
-    def _background_load_model(self):
-        """Background model loading thread function"""
-        try:
-            logger.info("Starting _load_model_implementation in background thread...")
-            success = self._load_model_implementation()
-            logger.info(f"_load_model_implementation returned: {success}")
-            
-            with self._model_condition:
-                if success:
-                    self.model_loaded = True
-                    self.model_load_error = None
-                    logger.info(f"{self.engine.title()} model loaded successfully!")
-                    self._update_status(f"{self.engine.title()} model loaded successfully!")
-                else:
-                    self.model_load_error = "Model loading failed"
-                    logger.error("Background model loading failed")
-                    self._update_status("Model loading failed")
-                
-                self.model_loading = False
-                
-                # Notify all waiting threads
-                self._model_condition.notify_all()
-                
-        except Exception as e:
-            import traceback
-            with self._model_condition:
-                self.model_loading = False
-                self.model_load_error = f"Unexpected error: {e}"
-                logger.error(f"Unexpected error in background model loading: {e}")
-                logger.error(f"Full traceback: {traceback.format_exc()}")
-                self._update_status(f"Error loading model: {e}")
-                
-                # Notify all waiting threads
-                self._model_condition.notify_all()
+        def _background_load():
+            self.transcription_service.ensure_model_loaded()
+        
+        load_thread = threading.Thread(target=_background_load, daemon=True)
+        load_thread.start()
+        logger.info("Started background model loading...")
+        return True
     
     def set_status_callback(self, callback: Callable[[str], None]):
         """Set a callback function to update UI status"""
@@ -608,10 +239,6 @@ class SpeechController:
     def set_transcript_callback(self, callback: Callable[[], None]):
         """Set callback function for transcript updates"""
         self.transcript_callback = callback
-
-    def set_audio_level_callback(self, callback: Callable[[float], None]):
-        """Set a callback function to update audio level for waveform visualization"""
-        self.audio_level_callback = callback
 
     def _update_status(self, status: str):
         """Update status and notify UI if callback is set"""
@@ -663,44 +290,28 @@ class SpeechController:
             self._update_status("Audio recording unavailable")
             return
         
-        self.listening = True
-        self.recording_frames = []
-        self._update_status("Recording...")
-        if self.recording_state_callback:
-            try:
-                self.recording_state_callback(True)
-            except Exception:
-                pass
-        
-        # Start audio recording
-        if self.audio_manager.start_recording():
+        # Start recording using RecordingService
+        success = self.recording_service.start_recording()
+        if success:
             logger.info("Audio recording started successfully")
         else:
             logger.error("Failed to start audio recording")
-            self.listening = False
             self._update_status("Recording failed")
 
     def stop_recording(self):
-        """Stop recording and process audio"""
+        """Stop recording and transcribe audio"""
         if not self.listening:
             return
         
-        self.listening = False
-        self._update_status("Processing...")
-        if self.recording_state_callback:
-            try:
-                self.recording_state_callback(False)
-            except Exception:
-                pass
+        # Stop recording and get result
+        result = self.recording_service.stop_recording()
         
-        # Stop audio recording and get frames
-        self.recording_frames = self.audio_manager.stop_recording()
-        
-        if self.recording_frames:
-            self.process_recorded_audio()
+        if result.success:
+            # Transcribe the audio
+            self._transcribe_audio(result.audio_path)
         else:
-            logger.warning("No audio recorded")
-            self._update_status("Idle")
+            logger.error(f"Recording failed: {result.error}")
+            self._update_status(f"Recording error: {result.error}")
 
     def toggle_recording(self):
         """Toggle between recording and idle states"""
@@ -709,209 +320,48 @@ class SpeechController:
         else:
             self.start_recording()
 
+    def _transcribe_audio(self, audio_path: str):
+        """Transcribe audio file using TranscriptionService"""
+        # Transcribe asynchronously to avoid blocking
+        threading.Thread(
+            target=self._do_transcription,
+            args=(audio_path,),
+            daemon=True
+        ).start()
 
-    def save_audio_to_file(self, frames, filename):
-        """Save recorded audio frames to a WAV file"""
-        return self.audio_manager.save_audio_to_file(frames, filename)
-
-    def process_recorded_audio(self):
-        """Process recorded audio through Whisper and optionally paste text"""
-        try:
-            if not self.recording_frames:
-                logger.warning("No audio frames to process")
-                self._update_status("No audio recorded")
-                return
-
-            # Validate audio frames
-            if not isinstance(self.recording_frames, list) or len(self.recording_frames) == 0:
-                logger.error("Invalid audio frames")
-                self._update_status("Invalid audio data")
-                return
-
-            # Save audio file with error handling
-            try:
-                if not self.save_audio_to_file(self.recording_frames, self.audio_path):
-                    logger.error("Failed to save audio file")
-                    self._update_status("Failed to save audio")
-                    return
-            except Exception as e:
-                logger.error(f"Error saving audio file: {e}")
-                self._update_status(f"Audio save error: {e}")
-                return
-
-            logger.info(f"Audio saved to {self.audio_path}")
-            time.sleep(0.05)  # ensure FS flush on some systems
-
-            # Validate saved file
-            try:
-                if not os.path.exists(self.audio_path):
-                    logger.error(f"Audio file not created: {self.audio_path}")
-                    self._update_status("Audio file not created")
-                    return
-                
-                file_size = os.path.getsize(self.audio_path)
-                if file_size == 0:
-                    logger.error(f"Audio file is empty: {self.audio_path}")
-                    self._update_status("Audio file is empty")
-                    return
-                
-                # Check for reasonable file size (not too small, not too large)
-                if file_size < 1000:  # Less than 1KB is probably too small
-                    logger.warning(f"Audio file seems too small: {file_size} bytes")
-                elif file_size > 50 * 1024 * 1024:  # More than 50MB is probably too large
-                    logger.warning(f"Audio file seems too large: {file_size} bytes")
-                    
-            except OSError as e:
-                logger.error(f"Error checking audio file: {e}")
-                self._update_status(f"File system error: {e}")
-                return
-
-            try:
-                # Ensure model is loaded before transcription (with timeout)
-                if not self._ensure_model_loaded(timeout_seconds=TIMEOUT_CONFIG.MODEL_LOADING_TIMEOUT):
-                    logger.error("Model loading failed or timed out, cannot transcribe")
-                    self._update_status("Transcription failed: Model not ready")
-                    return
-                
-                # Transcribe using the selected engine with performance monitoring
-                logger.info(f"Using transcription engine: {self.engine}")
-                with self.performance_monitor.time_operation("transcription"):
-                    try:
-                        if self.engine == "faster":
-                            # Use faster-whisper API with optimized parameters
-                            if self.speed_mode:
-                                transcribe_params = {
-                                    "temperature": self.temperature,
-                                    "compression_ratio_threshold": 2.4,
-                                    "no_speech_threshold": 0.6,
-                                    "condition_on_previous_text": False,
-                                    "word_timestamps": False,
-                                    "without_timestamps": True
-                                }
-                            else:
-                                transcribe_params = {
-                                    "temperature": self.temperature,
-                                    "condition_on_previous_text": True,
-                                    "word_timestamps": False
-                                }
-                            # Only set language if it's not auto-detection
-                            if self.language and self.language != "auto":
-                                transcribe_params["language"] = self.language
-                            
-                            logger.debug(f"Calling faster-whisper with params: {transcribe_params}")
-                            logger.info(f"Transcribing audio file: {self.audio_path}")
-                            logger.info(f"File exists before transcription: {os.path.exists(self.audio_path)}")
-                            segments, info = self.model.transcribe(self.audio_path, **transcribe_params)
-                            logger.debug(f"faster-whisper returned segments: {type(segments)}, info: {type(info)}")
-                            
-                            # Handle case where segments might be None or empty
-                            if segments is None:
-                                logger.warning("faster-whisper returned None segments")
-                                text = ""
-                            else:
-                                # Convert segments to list to handle iterables properly
-                                segments_list = list(segments) if hasattr(segments, '__iter__') else []
-                                if not segments_list:
-                                    logger.warning("faster-whisper returned empty segments")
-                                    text = ""
-                                else:
-                                    text = " ".join([segment.text for segment in segments_list if segment and hasattr(segment, 'text')]).strip()
-                                    logger.debug(f"faster-whisper processed {len(segments_list)} segments")
-                        else:
-                            # Use original openai-whisper API
-                            if self.speed_mode:
-                                transcribe_params = {
-                                    "fp16": True,
-                                    "temperature": self.temperature,
-                                    "compression_ratio_threshold": 2.4,
-                                    "no_speech_threshold": 0.6,
-                                    "condition_on_previous_text": False,
-                                    "initial_prompt": None,
-                                    "word_timestamps": False,
-                                    "prepend_punctuations": "",
-                                    "append_punctuations": ""
-                                }
-                            else:
-                                # Standard parameters for better accuracy
-                                transcribe_params = {
-                                    "fp16": False,
-                                    "temperature": self.temperature,
-                                    "condition_on_previous_text": True,
-                                    "word_timestamps": False
-                                }
-                            # Only set language if it's not auto-detection
-                            if self.language and self.language != "auto":
-                                transcribe_params["language"] = self.language
-                            
-                            logger.debug(f"Calling openai-whisper with params: {transcribe_params}")
-                            logger.info(f"Transcribing audio file: {self.audio_path}")
-                            logger.info(f"File exists before transcription: {os.path.exists(self.audio_path)}")
-                            result = self.model.transcribe(self.audio_path, **transcribe_params)
-                            logger.debug(f"openai-whisper returned result: {type(result)}")
-                            
-                            # Handle case where result might be None or missing text
-                            if result is None:
-                                logger.warning("openai-whisper returned None result")
-                                text = ""
-                            else:
-                                text = (result.get("text") or "").strip()
-                                if not text:
-                                    logger.debug("openai-whisper returned empty text")
-                    except Exception as e:
-                        # Log full traceback for debugging
-                        import traceback
-                        logger.error(f"Transcription exception: {e}")
-                        logger.error(f"Exception type: {type(e).__name__}")
-                        logger.error(f"Full traceback:\n{traceback.format_exc()}")
-                        
-                        # Classify the exception and provide specific error handling
-                        transcription_exception = classify_exception(e)
-                        
-                        if isinstance(transcription_exception, WhisperError):
-                            logger.error(f"Whisper transcription error: {e}")
-                            self._update_status(f"Transcription failed: {e}")
-                        elif isinstance(transcription_exception, FileIOError):
-                            logger.error(f"File I/O error during transcription: {e}")
-                            self._update_status(f"File error: {e}")
-                        elif isinstance(transcription_exception, MemoryError):
-                            logger.error(f"Memory error during transcription: {e}")
-                            self._update_status(f"Memory error: {e}")
-                        else:
-                            logger.error(f"Unexpected transcription error: {e}")
-                            logger.error(f"Error type: {type(e)}")
-                            self._update_status(f"Transcription error: {e}")
-                        
-                        text = ""
-                if text:
-                    logger.info(f"Recognized: {text}")
-                    
-                    # Add to transcript history
-                    timestamp = datetime.now().strftime("%m/%d %H:%M")
-                    transcript_entry = {
-                        "timestamp": timestamp,
-                        "text": text
-                    }
-                    self.transcript_log.insert(0, transcript_entry)  # Newest at top
-                    
-                    # Notify UI of new transcript
-                    if self.transcript_callback:
-                        self.transcript_callback()
-                    
-                    if self.auto_paste:
-                        try:
-                            pyautogui.write(text + " ")
-                        except Exception as paste_error:
-                            logger.warning(f"Auto-paste failed: {paste_error}")
-                            # Continue without crashing the app
-                else:
-                    logger.info("No speech detected")
-            except Exception as e:
-                logger.error(f"Error transcribing audio: {e}")
-        except Exception as e:
-            logger.error(f"Error processing recorded audio: {e}")
-        finally:
-            self.recording_frames = []
+    def _do_transcription(self, audio_path: str):
+        """Perform transcription in background thread"""
+        result = self.transcription_service.transcribe(audio_path)
+        
+        if result.success:
+            text = result.text
+            logger.info(f"Recognized: {text}")
+            
+            # Add to transcript history
+            timestamp = datetime.now().strftime("%m/%d %H:%M")
+            transcript_entry = {
+                "timestamp": timestamp,
+                "text": text,
+                "duration": result.duration_seconds,
+                "model_info": result.model_info
+            }
+            self.transcript_log.insert(0, transcript_entry)  # Newest at top
+            
+            # Notify UI of new transcript
+            if self.transcript_callback:
+                self.transcript_callback()
+            
+            # Auto-paste if enabled
+            if self.auto_paste:
+                try:
+                    pyautogui.write(text + " ")
+                except Exception as paste_error:
+                    logger.warning(f"Auto-paste failed: {paste_error}")
+            
             self._update_status("Idle")
+        else:
+            logger.error(f"Transcription failed: {result.error}")
+            self._update_status(f"Transcription error: {result.error}")
 
     def get_transcripts(self) -> List[Dict]:
         """Get the list of transcript history entries"""
@@ -928,6 +378,20 @@ class SpeechController:
             "recommendations": self.platform_features.get_recommendations()
         }
 
+    def _update_transcription_config(self, model_size: str = None, engine: str = None,
+                                     language: str = None, temperature: float = None):
+        """Helper method to update transcription service configuration"""
+        new_config = TranscriptionConfig(
+            model_size=model_size or self.transcription_service.config.model_size,
+            engine=engine or self.transcription_service.config.engine,
+            language=language or self.transcription_service.config.language,
+            temperature=temperature if temperature is not None else self.transcription_service.config.temperature
+        )
+        old_service = self.transcription_service
+        self.transcription_service = TranscriptionService(new_config)
+        self.transcription_service.set_status_callback(self._update_status)
+        old_service.unload_model()
+
     def set_auto_paste(self, enabled: bool):
         """Enable or disable auto-paste functionality"""
         self.auto_paste = enabled
@@ -935,26 +399,25 @@ class SpeechController:
 
     def set_language(self, lang_code: str):
         """Set the language for transcription"""
-        self.language = lang_code
+        self._update_transcription_config(language=lang_code)
         logger.info(f"Language set to: {lang_code}")
 
     def set_temperature(self, temperature: float):
         """Set the temperature for transcription (0.0 = deterministic, higher = more random)"""
-        self.temperature = max(0.0, min(1.0, temperature))  # Clamp between 0.0 and 1.0
-        logger.info(f"Temperature set to: {self.temperature}")
+        temperature = max(0.0, min(1.0, temperature))  # Clamp between 0.0 and 1.0
+        self._update_transcription_config(temperature=temperature)
+        logger.info(f"Temperature set to: {temperature}")
     
     def set_model(self, model_size: str):
         """Change the Whisper model dynamically"""
-        if model_size != self.model_size:
-            logger.info(f"Changing model from {self.model_size} to {model_size}...")
-            self.model_size = model_size
-            self.model = whisper.load_model(model_size)
-            logger.info(f"Model changed to {model_size} successfully!")
+        self._update_transcription_config(model_size=model_size)
+        logger.info(f"Model changed to {model_size}")
     
     def set_speed_mode(self, enabled: bool):
-        """Enable or disable speed optimizations"""
-        self.speed_mode = enabled
-        logger.info(f"Speed mode {'enabled' if enabled else 'disabled'}")
+        """Enable or disable speed optimizations (for backward compatibility)"""
+        # Note: Speed optimizations are now handled internally by TranscriptionService
+        # This method is kept for backward compatibility but doesn't change behavior
+        logger.info(f"Speed mode {'enabled' if enabled else 'disabled'} (managed by TranscriptionService)")
 
     def set_toggle_mode(self, enabled: bool):
         """Enable or disable toggle mode"""
@@ -1005,27 +468,48 @@ class SpeechController:
             logger.error(f"Error during cleanup: {e}")
             return False
     
-    def _cleanup_audio_manager(self) -> bool:
-        """Clean up audio manager resources"""
+    def _cleanup_recording_service(self) -> bool:
+        """Clean up recording service resources"""
         try:
-            if hasattr(self, 'audio_manager') and self.audio_manager:
-                self.audio_manager.cleanup()
-                logger.debug("Audio manager cleaned up")
+            if hasattr(self, 'recording_service') and self.recording_service:
+                self.recording_service.cleanup()
+                logger.debug("Recording service cleaned up")
             return True
         except Exception as e:
-            logger.error(f"Error cleaning up audio manager: {e}")
+            logger.error(f"Error cleaning up recording service: {e}")
             return False
     
-    def _verify_audio_cleanup(self) -> bool:
-        """Verify audio manager cleanup"""
+    def _verify_recording_cleanup(self) -> bool:
+        """Verify recording service cleanup"""
         try:
-            # Check if audio manager is properly cleaned up
-            if hasattr(self, 'audio_manager') and self.audio_manager:
-                return not self.audio_manager.is_recording
+            if hasattr(self, 'recording_service') and self.recording_service:
+                return not self.recording_service.is_recording()
             return True
         except Exception as e:
-            logger.error(f"Error verifying audio cleanup: {e}")
+            logger.error(f"Error verifying recording cleanup: {e}")
             return False
+    
+    def _cleanup_transcription_service(self) -> bool:
+        """Clean up transcription service resources"""
+        try:
+            if hasattr(self, 'transcription_service') and self.transcription_service:
+                self.transcription_service.unload_model()
+                logger.debug("Transcription service cleaned up")
+            return True
+        except Exception as e:
+            logger.error(f"Error cleaning up transcription service: {e}")
+            return False
+    
+    def _verify_transcription_cleanup(self) -> bool:
+        """Verify transcription service cleanup"""
+        try:
+            if hasattr(self, 'transcription_service') and self.transcription_service:
+                return not self.transcription_service.is_model_loaded()
+            return True
+        except Exception as e:
+            logger.error(f"Error verifying transcription cleanup: {e}")
+            return False
+    
     
     def _cleanup_hotkey_manager(self) -> bool:
         """Clean up hotkey manager resources"""
@@ -1047,62 +531,4 @@ class SpeechController:
             return True
         except Exception as e:
             logger.error(f"Error verifying hotkey cleanup: {e}")
-            return False
-    
-    def _cleanup_model(self) -> bool:
-        """Clean up Whisper model resources"""
-        try:
-            if hasattr(self, 'model') and self.model:
-                # Clear model reference to free memory
-                self.model = None
-                logger.debug("Whisper model cleaned up")
-            
-            # Reset model state
-            self.model_loaded = False
-            self.model_loading = False
-            self.model_load_error = None
-            
-            return True
-        except Exception as e:
-            logger.error(f"Error cleaning up model: {e}")
-            return False
-    
-    def _verify_model_cleanup(self) -> bool:
-        """Verify model cleanup"""
-        try:
-            return not self.model_loaded and not self.model_loading
-        except Exception as e:
-            logger.error(f"Error verifying model cleanup: {e}")
-            return False
-    
-    def _cleanup_files(self) -> bool:
-        """Clean up temporary files"""
-        try:
-            # Clean up temporary audio file
-            if hasattr(self, 'audio_path') and self.audio_path and os.path.exists(self.audio_path):
-                os.remove(self.audio_path)
-                logger.debug(f"Temporary audio file removed: {self.audio_path}")
-            
-            # Clean up temporary directory if empty
-            if hasattr(self, 'temp_dir') and self.temp_dir and os.path.exists(self.temp_dir):
-                try:
-                    os.rmdir(self.temp_dir)
-                    logger.debug(f"Temporary directory removed: {self.temp_dir}")
-                except OSError:
-                    # Directory not empty, that's okay
-                    pass
-            
-            return True
-        except Exception as e:
-            logger.error(f"Error cleaning up files: {e}")
-            return False
-    
-    def _verify_file_cleanup(self) -> bool:
-        """Verify file cleanup"""
-        try:
-            # Check if temporary files are cleaned up
-            audio_file_cleaned = not (hasattr(self, 'audio_path') and self.audio_path and os.path.exists(self.audio_path))
-            return audio_file_cleaned
-        except Exception as e:
-            logger.error(f"Error verifying file cleanup: {e}")
             return False
