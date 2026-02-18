@@ -95,6 +95,19 @@ class CleanupManager:
         
         logger.info(f"Cleanup manager initialized with {global_timeout}s timeout")
     
+    def reset(self) -> None:
+        """
+        Reset the cleanup manager state for testing.
+        Clears all tasks, results, and flags to allow re-registration.
+        WARNING: Only use in testing environments!
+        """
+        with self._cleanup_lock:
+            self.tasks.clear()
+            self.results.clear()
+            self._cleanup_started = False
+            self._cleanup_completed = False
+            logger.debug("Cleanup manager reset for testing")
+    
     def register_task(self, task: CleanupTask) -> None:
         """
         Register a cleanup task.
@@ -382,3 +395,8 @@ def perform_cleanup() -> Dict[str, CleanupResult]:
     """Perform cleanup using the global manager"""
     manager = get_cleanup_manager()
     return manager.cleanup_all()
+
+def reset_cleanup_manager() -> None:
+    """Reset the global cleanup manager state. For testing only."""
+    manager = get_cleanup_manager()
+    manager.reset()

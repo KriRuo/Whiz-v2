@@ -5,11 +5,14 @@
 - [x] Update version numbers
 - [x] Run all tests: `pytest tests/`
 - [x] Update changelog
+- [ ] Confirm build interpreter is Python 3.11 (`whiz_env_311`)
+- [ ] Confirm model backends installed in build env: `faster-whisper`, `openai-whisper`, `torch`
 
 ## Build Process ✅
 - [x] Windows: Run `build-windows.bat` - **SUCCESSFUL**
 - [ ] macOS: Run `build-macos.sh`
 - [ ] Linux: Run `build-linux.sh`
+- [ ] Windows manual fallback: `whiz_env_311\Scripts\python.exe -m PyInstaller whiz.spec --clean --noconfirm`
 
 ## Create Installers ✅
 - [x] Windows: Created simple installer package with `create-installer.bat`

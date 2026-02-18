@@ -45,6 +45,7 @@ from PyQt5.QtGui import QFont
 from core.logging_config import get_logger
 from core.settings_manager import SettingsManager
 from core.performance_monitor import get_performance_monitor
+from core.config import WHISPER_CONFIG
 # SpeechController and SpeechApp imported lazily to avoid heavy dependencies at startup
 
 logger = get_logger(__name__)
@@ -139,7 +140,7 @@ class InitializationWorker(QThread):
                 auto_paste=settings.get("behavior/auto_paste", True),
                 language=settings.get("whisper/language", None),
                 temperature=settings.get("whisper/temperature", 0.0),
-                engine=settings.get("whisper/engine", "openai")
+                engine=settings.get("whisper/engine", WHISPER_CONFIG.DEFAULT_ENGINE)
             )
             logger.info("Speech controller initialized successfully")
             

@@ -27,6 +27,7 @@ from core.cleanup_manager import (
     CleanupManager, CleanupPhase, register_cleanup_task, get_cleanup_manager
 )
 from core.config import TIMEOUT_CONFIG, WHISPER_CONFIG, AUDIO_CONFIG, MEMORY_CONFIG
+from core.transcription_service import TranscriptionService
 
 logger = get_logger(__name__)
 
@@ -92,6 +93,7 @@ class SpeechController:
         # Whisper model - lazy loading for faster startup
         self.model_size = model_size
         self.model = None  # Will be loaded on first use
+        self.transcription_service: Optional[TranscriptionService] = None
         self.model_loading = False
         self.model_loaded = False
         self.model_load_error = None
@@ -459,9 +461,6 @@ class SpeechController:
                 
                 # Load model based on engine with performance optimizations
                 if self.engine == "faster":
-                    if not FASTER_WHISPER_AVAILABLE:
-                        raise ModelLoadingError("faster-whisper not available")
-                    
                     # Determine device and compute type based on availability
                     try:
                         if CUDA_AVAILABLE:
@@ -477,26 +476,39 @@ class SpeechController:
                         device = "cpu"
                         compute_type = "int8"
                         logger.info("Using CPU with int8 optimization for faster-whisper (fallback)")
-                    
-                    # Use faster-whisper with optimized settings for better performance
+
+                    # Use process-based faster-whisper to isolate ONNX runtime from PyQt process
                     try:
-                        logger.info(f"Instantiating FasterWhisperModel with device={device}, compute_type={compute_type}")
-                        self.model = FasterWhisperModel(
-                            self.model_size, 
-                            device=device, 
+                        if self.transcription_service:
+                            self.transcription_service.stop()
+
+                        self.transcription_service = TranscriptionService(
+                            model_name=self.model_size,
+                            device=device,
                             compute_type=compute_type,
-                            download_root=None,  # Use default cache
-                            local_files_only=False,
-                            # Performance optimizations
-                            cpu_threads=4 if device == "cpu" else 1,  # Use multiple CPU threads only for CPU
-                            num_workers=1   # Single worker for stability
                         )
-                        logger.info("FasterWhisperModel instantiated successfully")
+
+                        logger.info(
+                            f"Starting transcription worker with device={device}, compute_type={compute_type}"
+                        )
+                        if not self.transcription_service.start(timeout_seconds=TIMEOUT_CONFIG.MODEL_LOADING_TIMEOUT):
+                            raise ModelLoadingError("Failed to start transcription worker")
+
+                        self.model = None
+                        logger.info("Transcription worker started successfully")
                     except Exception as e:
                         import traceback
-                        logger.error(f"Failed to load faster-whisper model: {e}")
+                        logger.error(f"Failed to start faster-whisper worker: {e}")
                         logger.error(f"Traceback: {traceback.format_exc()}")
                         logger.info("Falling back to OpenAI Whisper...")
+
+                        if self.transcription_service:
+                            self.transcription_service.stop()
+                            self.transcription_service = None
+
+                        if not WHISPER_AVAILABLE:
+                            raise ModelLoadingError("Failed to start worker and OpenAI Whisper is unavailable")
+
                         # Fallback to OpenAI Whisper
                         self.engine = "openai"
                         self.model = whisper.load_model(
@@ -511,8 +523,8 @@ class SpeechController:
                         download_root=None  # Use default cache
                     )
                 
-                # Validate model was loaded
-                if self.model is None:
+                # Validate model was loaded (only needed for non-service paths)
+                if self.engine != "faster" and self.model is None:
                     raise ModelLoadingError("Model loaded but is None")
                 
                 return True
@@ -532,7 +544,7 @@ class SpeechController:
     
     def is_model_ready(self):
         """Check if the Whisper model is ready for use"""
-        return self.model_loaded and self.model is not None
+        return self.model_loaded and (self.model is not None or self.transcription_service is not None)
     
     def get_model_status(self):
         """Get current model loading status"""
@@ -778,45 +790,26 @@ class SpeechController:
                 with self.performance_monitor.time_operation("transcription"):
                     try:
                         if self.engine == "faster":
-                            # Use faster-whisper API with optimized parameters
-                            if self.speed_mode:
-                                transcribe_params = {
-                                    "temperature": self.temperature,
-                                    "compression_ratio_threshold": 2.4,
-                                    "no_speech_threshold": 0.6,
-                                    "condition_on_previous_text": False,
-                                    "word_timestamps": False,
-                                    "without_timestamps": True
-                                }
-                            else:
-                                transcribe_params = {
-                                    "temperature": self.temperature,
-                                    "condition_on_previous_text": True,
-                                    "word_timestamps": False
-                                }
-                            # Only set language if it's not auto-detection
-                            if self.language and self.language != "auto":
-                                transcribe_params["language"] = self.language
-                            
-                            logger.debug(f"Calling faster-whisper with params: {transcribe_params}")
-                            logger.info(f"Transcribing audio file: {self.audio_path}")
-                            logger.info(f"File exists before transcription: {os.path.exists(self.audio_path)}")
-                            segments, info = self.model.transcribe(self.audio_path, **transcribe_params)
-                            logger.debug(f"faster-whisper returned segments: {type(segments)}, info: {type(info)}")
-                            
-                            # Handle case where segments might be None or empty
-                            if segments is None:
-                                logger.warning("faster-whisper returned None segments")
-                                text = ""
-                            else:
-                                # Convert segments to list to handle iterables properly
-                                segments_list = list(segments) if hasattr(segments, '__iter__') else []
-                                if not segments_list:
-                                    logger.warning("faster-whisper returned empty segments")
+                            if self.transcription_service:
+                                logger.info(f"Transcribing audio via worker: {self.audio_path}")
+                                result = self.transcription_service.transcribe(
+                                    audio_path=self.audio_path,
+                                    language=self.language,
+                                    temperature=self.temperature,
+                                    speed_mode=self.speed_mode,
+                                    timeout_seconds=TIMEOUT_CONFIG.TRANSCRIPTION_TIMEOUT,
+                                )
+
+                                if result is None:
+                                    logger.error("Transcription worker request failed")
+                                    self._update_status("Transcription failed")
                                     text = ""
                                 else:
-                                    text = " ".join([segment.text for segment in segments_list if segment and hasattr(segment, 'text')]).strip()
-                                    logger.debug(f"faster-whisper processed {len(segments_list)} segments")
+                                    text = (result.get("text") or "").strip()
+                            else:
+                                logger.error("faster engine selected but transcription worker is unavailable")
+                                self._update_status("Transcription engine unavailable")
+                                text = ""
                         else:
                             # Use original openai-whisper API
                             if self.speed_mode:
@@ -1052,6 +1045,10 @@ class SpeechController:
     def _cleanup_model(self) -> bool:
         """Clean up Whisper model resources"""
         try:
+            if hasattr(self, 'transcription_service') and self.transcription_service:
+                self.transcription_service.stop()
+                self.transcription_service = None
+
             if hasattr(self, 'model') and self.model:
                 # Clear model reference to free memory
                 self.model = None
@@ -1070,7 +1067,8 @@ class SpeechController:
     def _verify_model_cleanup(self) -> bool:
         """Verify model cleanup"""
         try:
-            return not self.model_loaded and not self.model_loading
+            worker_stopped = not getattr(self, 'transcription_service', None)
+            return not self.model_loaded and not self.model_loading and worker_stopped
         except Exception as e:
             logger.error(f"Error verifying model cleanup: {e}")
             return False

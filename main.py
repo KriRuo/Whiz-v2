@@ -15,6 +15,7 @@ from speech_ui import SpeechApp
 from core.settings_manager import SettingsManager
 from core.logging_config import initialize_logging, get_logger
 from core.platform_utils import PlatformUtils
+from core.config import WHISPER_CONFIG
 
 # Add FFmpeg to PATH if it exists locally
 # This ensures Whisper can use FFmpeg for audio processing
@@ -166,7 +167,7 @@ def main():
             auto_paste=settings.get("behavior/auto_paste", True),  # Use saved auto-paste setting
             language=settings.get("whisper/language", None),  # Use saved language or auto-detect
             temperature=settings.get("whisper/temperature", 0.0),  # Default to fastest temperature
-            engine=settings.get("whisper/engine", "openai")  # Default to openai engine (faster-whisper has PyQt/ONNX issues)
+            engine=settings.get("whisper/engine", WHISPER_CONFIG.DEFAULT_ENGINE)
         )
         
         # Check if controller initialized successfully
