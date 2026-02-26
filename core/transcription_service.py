@@ -17,6 +17,97 @@ from core.config import TIMEOUT_CONFIG, WHISPER_CONFIG
 
 logger = logging.getLogger(__name__)
 
+# region agent log
+try:
+    import json
+    import os
+
+    def _agent_debug_log(hypothesis_id: str, message: str, data: Dict[str, Any]) -> None:
+        """
+        Lightweight NDJSON logger for debugging faster-whisper worker startup.
+        Writes to .cursor/debug.log in the project root.
+        """
+        try:
+            ts_ms = int(time.time() * 1000)
+            log_path = r"c:\Users\krir\Documents\Solutions\Whiz\.cursor\debug.log"
+            os.makedirs(os.path.dirname(log_path), exist_ok=True)
+            entry = {
+                "id": f"log_{ts_ms}",
+                "timestamp": ts_ms,
+                "location": "core/transcription_service.py",
+                "message": message,
+                "data": data,
+                "runId": "pre-fix",
+                "hypothesisId": hypothesis_id,
+            }
+            with open(log_path, "a", encoding="utf-8") as f:
+                f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+        except Exception:
+            # Never let debug logging break normal execution
+            pass
+except Exception:
+    def _agent_debug_log(hypothesis_id: str, message: str, data: Dict[str, Any]) -> None:  # type: ignore[no-redef]
+        pass
+
+
+def _safe_runtime_fingerprint() -> Dict[str, Any]:
+    try:
+        import os
+        import platform
+        import sys
+
+        return {
+            "python_version": sys.version.split()[0],
+            "python_exe": sys.executable,
+            "platform": platform.platform(),
+            "machine": platform.machine(),
+            "processor": platform.processor(),
+            "cwd": os.getcwd(),
+        }
+    except Exception:
+        return {}
+
+
+def _safe_library_versions() -> Dict[str, Any]:
+    """
+    Best-effort version capture for faster-whisper stack. Must be safe to call
+    from worker process.
+    """
+    versions: Dict[str, Any] = {}
+    try:
+        import importlib
+
+        fw = importlib.import_module("faster_whisper")
+        versions["faster_whisper"] = getattr(fw, "__version__", None)
+    except Exception:
+        pass
+
+    for pkg in ("ctranslate2", "tokenizers", "huggingface_hub"):
+        try:
+            import importlib
+
+            mod = importlib.import_module(pkg)
+            versions[pkg] = getattr(mod, "__version__", None)
+        except Exception:
+            continue
+
+    return versions
+
+
+def _safe_thread_fingerprint() -> Dict[str, Any]:
+    try:
+        import threading
+
+        cur = threading.current_thread()
+        return {
+            "name": cur.name,
+            "ident": cur.ident,
+            "is_main": cur is threading.main_thread(),
+        }
+    except Exception:
+        return {}
+# endregion
+
 
 def _transcription_worker_main(
     request_queue: "mp.queues.Queue",
@@ -26,8 +117,23 @@ def _transcription_worker_main(
     """Worker process entrypoint for transcription requests."""
     model = None
 
+    _agent_debug_log(
+        "H1",
+        "worker_main_start",
+        {
+            "pid": mp.current_process().pid if mp.current_process() else None,
+            "config": {
+                "model_name": config.get("model_name"),
+                "device": config.get("device"),
+                "compute_type": config.get("compute_type"),
+            },
+            "runtime": _safe_runtime_fingerprint(),
+        },
+    )
+
     try:
         from faster_whisper import WhisperModel
+        _agent_debug_log("H1", "worker_import_ok", _safe_library_versions())
 
         model = WhisperModel(
             config.get("model_name", WHISPER_CONFIG.DEFAULT_MODEL),
@@ -36,8 +142,10 @@ def _transcription_worker_main(
             cpu_threads=config.get("cpu_threads", 4),
             num_workers=config.get("num_workers", 1),
         )
+        _agent_debug_log("H2", "worker_model_initialized", {})
         response_queue.put({"type": "ready"})
     except Exception as exc:
+        _agent_debug_log("H2", "worker_model_init_failed", {"error": str(exc)})
         response_queue.put({"type": "error", "error": f"Model init failed: {exc}"})
         return
 
@@ -149,6 +257,12 @@ class TranscriptionService:
             "compute_type": self.compute_type,
         }
 
+        _agent_debug_log(
+            "H3",
+            "service_start_spawning_worker",
+            {"timeout_seconds": timeout_seconds, "config": config, "thread": _safe_thread_fingerprint()},
+        )
+
         self.worker_process = self._ctx.Process(
             target=self._worker_target,
             args=(self.request_queue, self.response_queue, config),
@@ -156,22 +270,62 @@ class TranscriptionService:
         )
         self.worker_process.start()
 
+        _agent_debug_log(
+            "H3",
+            "service_worker_started",
+            {
+                "pid": self.worker_process.pid,
+                "alive": self.worker_process.is_alive(),
+                "thread": _safe_thread_fingerprint(),
+            },
+        )
+
         try:
             response = self.response_queue.get(timeout=timeout_seconds)
         except Empty:
-            logger.error("Transcription worker did not signal readiness before timeout")
+            pid = getattr(self.worker_process, "pid", None)
+            alive = self.worker_process.is_alive() if self.worker_process else None
+            exitcode = self.worker_process.exitcode if self.worker_process else None
+            logger.error(
+                "Transcription worker did not signal readiness before timeout "
+                f"(pid={pid}, alive={alive}, exitcode={exitcode})"
+            )
+            _agent_debug_log(
+                "H4",
+                "service_worker_timeout_waiting_ready",
+                {
+                    "pid": pid,
+                    "alive": alive,
+                    "exitcode": exitcode,
+                },
+            )
             self.stop()
             return False
         except Exception as exc:
             logger.error(f"Error waiting for worker readiness: {exc}")
+            _agent_debug_log(
+                "H4",
+                "service_worker_wait_exception",
+                {"error": str(exc)},
+            )
             self.stop()
             return False
 
         if response.get("type") == "ready":
             self.is_ready = True
+            _agent_debug_log(
+                "H3",
+                "service_worker_ready",
+                {"pid": getattr(self.worker_process, "pid", None)},
+            )
             return True
 
         logger.error(f"Worker failed to initialize: {response}")
+        _agent_debug_log(
+            "H4",
+            "service_worker_failed_init",
+            {"response": response},
+        )
         self.stop()
         return False
 
