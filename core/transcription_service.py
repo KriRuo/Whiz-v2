@@ -9,7 +9,9 @@ from __future__ import annotations
 
 import logging
 import multiprocessing as mp
+import tempfile
 import time
+import faulthandler
 from queue import Empty
 from typing import Any, Callable, Dict, Optional
 
@@ -106,6 +108,15 @@ def _safe_thread_fingerprint() -> Dict[str, Any]:
         }
     except Exception:
         return {}
+
+
+def _decode_windows_exitcode(exitcode: Optional[int]) -> str:
+    if exitcode is None:
+        return "None"
+    unsigned = exitcode & 0xFFFFFFFF
+    if unsigned == 0xC0000005:
+        return f"{exitcode} (0x{unsigned:08X} ACCESS_VIOLATION)"
+    return f"{exitcode} (0x{unsigned:08X})"
 # endregion
 
 
@@ -116,6 +127,36 @@ def _transcription_worker_main(
 ) -> None:
     """Worker process entrypoint for transcription requests."""
     model = None
+    crash_log_path: Optional[str] = None
+
+    try:
+        pid = mp.current_process().pid if mp.current_process() else "unknown"
+        crash_log_path = os.path.join(
+            tempfile.gettempdir(),
+            f"whiz_worker_crash_{pid}.log",
+        )
+    except Exception:
+        crash_log_path = None
+
+    def _stage(stage: str, payload: Optional[Dict[str, Any]] = None) -> None:
+        if not crash_log_path:
+            return
+        try:
+            with open(crash_log_path, "a", encoding="utf-8") as handle:
+                data = payload or {}
+                handle.write(
+                    f"{time.time():.3f} | {stage} | {json.dumps(data, ensure_ascii=False)}\n"
+                )
+        except Exception:
+            pass
+
+    _stage("worker_entry")
+    if crash_log_path:
+        try:
+            with open(crash_log_path, "a", encoding="utf-8") as handle:
+                faulthandler.enable(file=handle, all_threads=True)
+        except Exception:
+            pass
 
     _agent_debug_log(
         "H1",
@@ -128,13 +169,26 @@ def _transcription_worker_main(
                 "compute_type": config.get("compute_type"),
             },
             "runtime": _safe_runtime_fingerprint(),
+            "crash_log_path": crash_log_path,
         },
     )
 
     try:
+        _stage("before_import_faster_whisper")
         from faster_whisper import WhisperModel
+        _stage("after_import_faster_whisper", _safe_library_versions())
         _agent_debug_log("H1", "worker_import_ok", _safe_library_versions())
 
+        _stage(
+            "before_model_init",
+            {
+                "model_name": config.get("model_name", WHISPER_CONFIG.DEFAULT_MODEL),
+                "device": config.get("device", "cpu"),
+                "compute_type": config.get("compute_type", WHISPER_CONFIG.COMPUTE_TYPE_CPU),
+                "cpu_threads": config.get("cpu_threads", 4),
+                "num_workers": config.get("num_workers", 1),
+            },
+        )
         model = WhisperModel(
             config.get("model_name", WHISPER_CONFIG.DEFAULT_MODEL),
             device=config.get("device", "cpu"),
@@ -142,9 +196,11 @@ def _transcription_worker_main(
             cpu_threads=config.get("cpu_threads", 4),
             num_workers=config.get("num_workers", 1),
         )
+        _stage("after_model_init")
         _agent_debug_log("H2", "worker_model_initialized", {})
         response_queue.put({"type": "ready"})
     except Exception as exc:
+        _stage("model_init_exception", {"error": str(exc)})
         _agent_debug_log("H2", "worker_model_init_failed", {"error": str(exc)})
         response_queue.put({"type": "error", "error": f"Model init failed: {exc}"})
         return
@@ -288,7 +344,7 @@ class TranscriptionService:
             exitcode = self.worker_process.exitcode if self.worker_process else None
             logger.error(
                 "Transcription worker did not signal readiness before timeout "
-                f"(pid={pid}, alive={alive}, exitcode={exitcode})"
+                f"(pid={pid}, alive={alive}, exitcode={_decode_windows_exitcode(exitcode)})"
             )
             _agent_debug_log(
                 "H4",
@@ -297,6 +353,7 @@ class TranscriptionService:
                     "pid": pid,
                     "alive": alive,
                     "exitcode": exitcode,
+                    "decoded_exitcode": _decode_windows_exitcode(exitcode),
                 },
             )
             self.stop()

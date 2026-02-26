@@ -1,5 +1,47 @@
 # ONNX Runtime Compatibility Investigation
 
+## Update (Feb 26, 2026) - Crash Pinpointed to Native DLL Conflict
+
+### What was reproduced
+
+- Full app startup (`main.py`) still fails to initialize faster-whisper worker.
+- Worker timeout shows `exitcode=3221225477`, which decodes to `0xC0000005 (ACCESS_VIOLATION)`.
+- Isolated worker startup via `TranscriptionService` often succeeds outside full UI context.
+
+### New hard evidence collected
+
+1. Worker stage log in `%TEMP%` (example: `whiz_worker_crash_65792.log`) shows:
+   - `before_import_faster_whisper` ✅
+   - `after_import_faster_whisper` ✅
+   - `before_model_init` ✅
+   - no `after_model_init` ❌
+
+   This proves the process crashes inside native code during `WhisperModel(...)` construction.
+
+2. Windows Event Viewer (`Application Error`, Event ID 1000) for the same worker PID (`0x10100` = `65792`) reports:
+   - Faulting module: `MSVCP140.dll`
+   - Faulting module path: `...\.venv\Lib\site-packages\PyQt5\Qt5\bin\MSVCP140.dll`
+   - Exception code: `0xc0000005`
+
+### Interpretation
+
+- This is not a Python exception path.
+- The failure is consistent with a native runtime/DLL conflict in the worker process.
+- The faulting module path points at PyQt-bundled runtime DLLs being involved when faster-whisper/ctranslate2 initializes.
+
+### Debugging direction (highest value)
+
+1. Capture and inspect WER dump for the failing worker process (Report ID in Event Viewer).
+2. Compare loaded DLL order between:
+   - successful isolated worker launch
+   - failing full app launch
+3. Test worker startup with a sanitized `PATH` that excludes `PyQt5\Qt5\bin` entries before model init.
+
+### Practical conclusion right now
+
+- Current architecture already isolates transcription in a subprocess, but inherited native runtime state is still enough to trigger intermittent access violations.
+- Root cause focus should move from ONNX version changes to Windows native dependency resolution / runtime DLL collisions.
+
 **Date:** November 22, 2024  
 **Finding:** Critical discovery about faster-whisper crashes
 
