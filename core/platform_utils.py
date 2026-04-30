@@ -1,8 +1,5 @@
 """
-Platform Utilities for Cross-Platform Compatibility
-
-This module provides platform detection and utilities for handling
-platform-specific behaviors and paths.
+Platform Utilities — Windows only.
 """
 
 import os
@@ -15,48 +12,19 @@ from .logging_config import get_logger
 logger = get_logger(__name__)
 
 class PlatformType:
-    """Platform type enumeration"""
+    """Platform type constants"""
     WINDOWS = "windows"
-    LINUX = "linux"
-    MACOS = "macos"
-    UNKNOWN = "unknown"
 
 class PlatformUtils:
-    """Cross-platform utility functions"""
-    
+    """Windows platform utility functions"""
+
     @staticmethod
     def get_platform() -> str:
-        """
-        Get the current platform type.
-        
-        Returns:
-            Platform type string (windows, linux, macos, unknown)
-        """
-        system = platform.system().lower()
-        
-        if system == "windows":
-            return PlatformType.WINDOWS
-        elif system == "linux":
-            return PlatformType.LINUX
-        elif system == "darwin":
-            return PlatformType.MACOS
-        else:
-            return PlatformType.UNKNOWN
-    
+        return PlatformType.WINDOWS
+
     @staticmethod
     def is_windows() -> bool:
-        """Check if running on Windows"""
-        return PlatformUtils.get_platform() == PlatformType.WINDOWS
-    
-    @staticmethod
-    def is_linux() -> bool:
-        """Check if running on Linux"""
-        return PlatformUtils.get_platform() == PlatformType.LINUX
-    
-    @staticmethod
-    def is_macos() -> bool:
-        """Check if running on macOS"""
-        return PlatformUtils.get_platform() == PlatformType.MACOS
+        return True
     
     @staticmethod
     def get_platform_info() -> Dict[str, Any]:

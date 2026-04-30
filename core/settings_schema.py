@@ -225,16 +225,16 @@ class SettingsSchema:
         self.schema["whisper/engine"] = SettingSchema(
             key="whisper/engine",
             type=SettingType.ENUM,
-            default="openai",
-            description="Whisper engine: 'openai' (stable, recommended) or 'faster' (experimental, may have compatibility issues)",
-            allowed_values=["openai", "faster"],
+            default="faster",
+            description="Whisper engine (faster-whisper only)",
+            allowed_values=["faster"],
             validator=self._validate_whisper_engine
         )
         
         self.schema["whisper/model_name"] = SettingSchema(
             key="whisper/model_name",
             type=SettingType.ENUM,
-            default="tiny",
+            default="base",
             description="Whisper model size",
             allowed_values=["tiny", "base", "small", "medium", "large"],
             validator=self._validate_model_name
@@ -555,8 +555,8 @@ class SettingsSchema:
     
     def _validate_whisper_engine(self, value: str) -> str:
         """Validate Whisper engine"""
-        if value not in ["openai", "faster"]:
-            raise ValueError(f"Invalid Whisper engine: {value}")
+        if value != "faster":
+            raise ValueError(f"Invalid Whisper engine: {value}. Only 'faster' is supported.")
         return value
     
     def _validate_model_name(self, value: str) -> str:

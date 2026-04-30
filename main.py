@@ -72,43 +72,28 @@ def main():
         
         # Step 1: Set Windows per-monitor DPI awareness (v2) via ctypes
         # This enables automatic scaling for each monitor independently
-        if sys.platform == "win32":
+        try:
+            import ctypes
+            from ctypes import wintypes
+            DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 = -4
+            user32 = ctypes.windll.user32
             try:
-                import ctypes
-                from ctypes import wintypes
-                
-                # Set per-monitor DPI awareness v2 (Windows 10 1703+)
-                # This allows each monitor to have different DPI scaling
-                # Use the correct constant value for PerMonitorV2
-                DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 = -4
-                
-                # Get the SetProcessDpiAwarenessContext function
-                user32 = ctypes.windll.user32
-                
-                # Try the modern API first (Windows 10 1703+)
-                try:
-                    # Define the function signature
-                    user32.SetProcessDpiAwarenessContext.argtypes = [wintypes.HANDLE]
-                    user32.SetProcessDpiAwarenessContext.restype = wintypes.BOOL
-                    
-                    # Call with the correct context value
-                    result = user32.SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2)
-                    if result:
-                        logger.info("Windows per-monitor DPI awareness (v2) enabled")
-                    else:
-                        raise Exception("SetProcessDpiAwarenessContext returned False")
-                        
-                except Exception as e:
-                    logger.warning(f"Modern DPI awareness failed: {e}")
-                    # Fallback: try older DPI awareness method
-                    try:
-                        user32.SetProcessDPIAware()
-                        logger.info("Windows basic DPI awareness enabled (fallback)")
-                    except Exception as e2:
-                        logger.warning(f"Could not set basic DPI awareness: {e2}")
-                        
+                user32.SetProcessDpiAwarenessContext.argtypes = [wintypes.HANDLE]
+                user32.SetProcessDpiAwarenessContext.restype = wintypes.BOOL
+                result = user32.SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2)
+                if result:
+                    logger.info("Windows per-monitor DPI awareness (v2) enabled")
+                else:
+                    raise Exception("SetProcessDpiAwarenessContext returned False")
             except Exception as e:
-                logger.warning(f"Could not set Windows DPI awareness: {e}")
+                logger.warning(f"Modern DPI awareness failed: {e}")
+                try:
+                    user32.SetProcessDPIAware()
+                    logger.info("Windows basic DPI awareness enabled (fallback)")
+                except Exception as e2:
+                    logger.warning(f"Could not set basic DPI awareness: {e2}")
+        except Exception as e:
+            logger.warning(f"Could not set Windows DPI awareness: {e}")
         
         # Step 2: Set Qt environment variables for automatic scaling
         # QT_AUTO_SCREEN_SCALE_FACTOR enables automatic detection of screen scale factors
@@ -182,13 +167,10 @@ def main():
         
         window.show()
         
-        # On Windows, set the taskbar icon using Windows API
-        if sys.platform == "win32":
-            try:
-                import ctypes
-                
-                # Get the window handle
-                hwnd = int(window.winId())
+        # Set the taskbar icon using Windows API
+        try:
+            import ctypes
+            hwnd = int(window.winId())
                 
                 # Load the icon
                 user32 = ctypes.windll.user32

@@ -5,15 +5,13 @@ core/transcription_service.py
 Standalone transcription service for Whisper-based speech-to-text.
 
 This service handles:
-- Whisper model loading and management (faster-whisper and openai-whisper engines)
+- Whisper model loading and management (faster-whisper)
 - Transcription request processing with retry logic
-- Async transcription queue management
 - Comprehensive error handling and classification
 - Thread-safe model access
 
 Features:
     - Lazy model loading for fast startup
-    - Support for multiple Whisper engines (faster-whisper, openai-whisper)
     - Configurable model size, language, and temperature
     - Thread-safe transcription operations
     - Structured error responses
@@ -59,20 +57,12 @@ from .transcription_exceptions import (
 )
 from .config import TIMEOUT_CONFIG, WHISPER_CONFIG, MEMORY_CONFIG
 
-# Try importing whisper engines (they may not be installed)
 try:
     import faster_whisper
     FASTER_WHISPER_AVAILABLE = True
 except ImportError:
     faster_whisper = None
     FASTER_WHISPER_AVAILABLE = False
-
-try:
-    import whisper
-    WHISPER_AVAILABLE = True
-except ImportError:
-    whisper = None
-    WHISPER_AVAILABLE = False
 
 try:
     import torch
@@ -87,7 +77,6 @@ logger = get_logger(__name__)
 class TranscriptionEngine(Enum):
     """Supported Whisper engines"""
     FASTER_WHISPER = "faster"
-    OPENAI_WHISPER = "openai"
 
 
 class TranscriptionStatus(Enum):
@@ -101,8 +90,8 @@ class TranscriptionStatus(Enum):
 @dataclass
 class TranscriptionConfig:
     """Configuration for transcription service"""
-    model_size: str = "tiny"  # tiny, base, small, medium, large
-    engine: str = "faster"  # faster or openai
+    model_size: str = "base"  # tiny, base, small, medium, large
+    engine: str = "faster"
     language: str = "auto"  # Language code or "auto"
     temperature: float = 0.0  # 0.0-1.0, lower = more accurate
     speed_mode: bool = True  # Enable speed optimizations
@@ -116,9 +105,8 @@ class TranscriptionConfig:
         if self.model_size not in valid_sizes:
             raise ValueError(f"Invalid model_size: {self.model_size}. Must be one of {valid_sizes}")
         
-        valid_engines = ["faster", "openai"]
-        if self.engine not in valid_engines:
-            raise ValueError(f"Invalid engine: {self.engine}. Must be one of {valid_engines}")
+        if self.engine != "faster":
+            raise ValueError(f"Invalid engine: {self.engine}. Only 'faster' (faster-whisper) is supported.")
         
         if not (0.0 <= self.temperature <= 1.0):
             raise ValueError(f"Invalid temperature: {self.temperature}. Must be between 0.0 and 1.0")
@@ -174,7 +162,6 @@ class TranscriptionService:
         # Engine availability (checked lazily)
         self._engines_checked = False
         self._faster_whisper_available = False
-        self._openai_whisper_available = False
         self._cuda_available = False
         
         # Status callback for UI updates
@@ -205,14 +192,7 @@ class TranscriptionService:
             logger.info("faster-whisper engine available")
         else:
             logger.warning("faster-whisper not available")
-        
-        # Check openai-whisper
-        self._openai_whisper_available = WHISPER_AVAILABLE
-        if self._openai_whisper_available:
-            logger.info("openai-whisper engine available")
-        else:
-            logger.warning("openai-whisper not available")
-        
+
         # Check CUDA availability
         if TORCH_AVAILABLE:
             self._cuda_available = torch.cuda.is_available()
@@ -308,26 +288,11 @@ class TranscriptionService:
         # Determine which engine to use
         engine = self.config.engine.lower()
         
-        # Try requested engine first
-        if engine == "faster" and self._faster_whisper_available:
-            return self._load_faster_whisper()
-        elif engine == "openai" and self._openai_whisper_available:
-            return self._load_openai_whisper()
-        
-        # Fallback to any available engine
-        logger.warning(f"Requested engine '{engine}' not available, trying fallback...")
-        
         if self._faster_whisper_available:
-            logger.info("Falling back to faster-whisper")
-            self.config.engine = "faster"
             return self._load_faster_whisper()
-        elif self._openai_whisper_available:
-            logger.info("Falling back to openai-whisper")
-            self.config.engine = "openai"
-            return self._load_openai_whisper()
-        
-        logger.error("No Whisper engines available!")
-        raise ModelLoadingError("No Whisper engines available. Please install faster-whisper or openai-whisper.")
+
+        logger.error("faster-whisper not available!")
+        raise ModelLoadingError("faster-whisper is not installed. Run: pip install faster-whisper")
     
     def _load_faster_whisper(self) -> bool:
         """Load faster-whisper model"""
@@ -354,23 +319,6 @@ class TranscriptionService:
         except Exception as e:
             logger.error(f"Failed to load faster-whisper model: {e}")
             raise ModelLoadingError(f"faster-whisper loading failed: {e}")
-    
-    def _load_openai_whisper(self) -> bool:
-        """Load openai-whisper model"""
-        try:
-            if whisper is None:
-                raise ModelLoadingError("openai-whisper not available")
-            
-            logger.info(f"Loading openai-whisper model: {self.config.model_size}")
-            
-            self.model = whisper.load_model(self.config.model_size)
-            
-            logger.info("openai-whisper model loaded successfully")
-            return True
-            
-        except Exception as e:
-            logger.error(f"Failed to load openai-whisper model: {e}")
-            raise ModelLoadingError(f"openai-whisper loading failed: {e}")
     
     def transcribe(self, audio_path: str) -> TranscriptionResult:
         """
@@ -405,10 +353,7 @@ class TranscriptionService:
         try:
             self._update_status("Transcribing...")
             
-            if self.config.engine == "faster":
-                result = self._transcribe_faster_whisper(audio_path)
-            else:
-                result = self._transcribe_openai_whisper(audio_path)
+            result = self._transcribe_faster_whisper(audio_path)
             
             duration = time.time() - start_time
             result.duration_seconds = duration
@@ -464,38 +409,6 @@ class TranscriptionService:
         except Exception as e:
             logger.error(f"faster-whisper transcription failed: {e}")
             raise WhisperError(f"faster-whisper transcription failed: {e}")
-    
-    @with_retry("transcription")
-    def _transcribe_openai_whisper(self, audio_path: str) -> TranscriptionResult:
-        """Transcribe using openai-whisper"""
-        try:
-            # Configure transcription parameters
-            kwargs = {}
-            if self.config.language != "auto":
-                kwargs["language"] = self.config.language
-            
-            kwargs["temperature"] = self.config.temperature
-            
-            # Transcribe
-            result = self.model.transcribe(audio_path, **kwargs)
-            
-            text = result.get("text", "").strip()
-            
-            model_info = {
-                "engine": "openai-whisper",
-                "model_size": self.config.model_size,
-                "language": result.get("language", self.config.language)
-            }
-            
-            return TranscriptionResult(
-                success=True,
-                text=text,
-                model_info=model_info
-            )
-            
-        except Exception as e:
-            logger.error(f"openai-whisper transcription failed: {e}")
-            raise WhisperError(f"openai-whisper transcription failed: {e}")
     
     def unload_model(self):
         """Unload the model to free memory"""
@@ -574,11 +487,7 @@ class TranscriptionService:
         # Check engine availability
         self._check_engine_availability()
         
-        # Determine if service is ready
-        engine_available = (
-            (self.config.engine == "faster" and self._faster_whisper_available) or
-            (self.config.engine == "openai" and self._openai_whisper_available)
-        )
+        engine_available = self._faster_whisper_available
         
         if not engine_available:
             result = ReadinessCheckResult(

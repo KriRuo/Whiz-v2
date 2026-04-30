@@ -11,4 +11,4 @@ if (Test-Path (Join-Path $ffmpegPath "ffmpeg.exe")) {
     $env:PATH = "$ffmpegPath;$env:PATH"
 }
 
-Start-Process -FilePath "whiz_env_311\Scripts\pythonw.exe" -ArgumentList "main_with_splash.py" -WindowStyle Hidden
+Start-Process -FilePath "whiz_env_311\Scripts\pythonw.exe" -ArgumentList "main.py" -WindowStyle Hidden
