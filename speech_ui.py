@@ -243,13 +243,13 @@ class SpeechApp(MainWindow):
                 logger.warning("Failed to initialize controller for model loading")
                 return
         
-        self.record_tab.set_state("loading")
-        if self.controller.preload_model():
-            logger.info("Started background model loading...")
-            self.update_status("Idle")
-        else:
-            logger.info("Model already loaded or loading")
+        # Model loading already started in SpeechController.__init__ — just sync UI state
+        model_status = self.controller.get_model_status()
+        if model_status == "loaded":
             self.record_tab.set_state("idle")
+        else:
+            self.record_tab.set_state("loading")
+        self.update_status("Idle")
         
     def start_recording(self):
         """Start recording via GUI button"""
@@ -359,6 +359,9 @@ class SpeechApp(MainWindow):
                 self.play_stop_sound()
         elif status == "Processing..." or model_status == "loading":
             self.record_tab.set_state("loading")
+        else:
+            # Covers model-ready status strings like "Faster model loaded successfully!"
+            self.record_tab.set_state("idle")
             # Hide visual indicator during processing
             if self.lifecycle_manager.is_widget_active("visual_indicator"):
                 visual_indicator = self.lifecycle_manager.get_widget("visual_indicator")
