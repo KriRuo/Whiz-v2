@@ -15,6 +15,7 @@ from speech_ui import SpeechApp
 from core.settings_manager import SettingsManager
 from core.logging_config import initialize_logging, get_logger
 from core.platform_utils import PlatformUtils
+from core.launch_mode import is_tray_launch
 
 # Add FFmpeg to PATH if it exists locally
 # This ensures Whisper can use FFmpeg for audio processing
@@ -161,11 +162,14 @@ def main():
         
         # Create and show the main window
         window = SpeechApp(controller, settings_manager)
-        
+
         # Store single instance manager for cleanup
         window.single_instance_manager = single_instance
-        
-        window.show()
+
+        if is_tray_launch(sys.argv):
+            logger.info("Tray launch detected — running in system tray only")
+        else:
+            window.show()
         
         # Set the taskbar icon using Windows API
         try:

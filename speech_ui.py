@@ -243,12 +243,13 @@ class SpeechApp(MainWindow):
                 logger.warning("Failed to initialize controller for model loading")
                 return
         
+        self.record_tab.set_state("loading")
         if self.controller.preload_model():
             logger.info("Started background model loading...")
-            # Update status to show loading
-            self.update_status("Idle")  # This will show "Model: Loading..."
+            self.update_status("Idle")
         else:
             logger.info("Model already loaded or loading")
+            self.record_tab.set_state("idle")
         
     def start_recording(self):
         """Start recording via GUI button"""
@@ -263,8 +264,7 @@ class SpeechApp(MainWindow):
                 return
         
         self.controller.start_recording()
-        self.record_tab.start_button.setEnabled(False)
-        self.record_tab.stop_button.setEnabled(True)
+        self.record_tab.set_state("recording")
         
         # Play start sound (only after initialization)
         if not self._is_initializing:
@@ -273,8 +273,7 @@ class SpeechApp(MainWindow):
     def stop_recording(self):
         """Stop recording via GUI button"""
         self.controller.stop_recording()
-        self.record_tab.start_button.setEnabled(True)
-        self.record_tab.stop_button.setEnabled(False)
+        self.record_tab.set_state("idle")
         
         # Play stop sound (only after initialization)
         if not self._is_initializing:
@@ -336,10 +335,9 @@ class SpeechApp(MainWindow):
         else:  # Idle or any other status
             self.waveform_widget.set_state("idle")
         
-        # Update button states based on status
+        # Drive single record button from combined status + model state
         if status == "Recording...":
-            self.record_tab.start_button.setEnabled(False)
-            self.record_tab.stop_button.setEnabled(True)
+            self.record_tab.set_state("recording")
             # Show visual indicator if enabled
             if (self.controller.visual_indicator_enabled and 
                 self.lifecycle_manager.is_widget_active("visual_indicator")):
@@ -350,21 +348,17 @@ class SpeechApp(MainWindow):
             if not self._is_initializing:
                 self.play_start_sound()
         elif status == "Idle":
-            self.record_tab.start_button.setEnabled(True)
-            self.record_tab.stop_button.setEnabled(False)
+            self.record_tab.set_state("idle")
             # Hide visual indicator
             if hasattr(self, 'visual_indicator') and self.visual_indicator is not None:
                 try:
                     self.visual_indicator.hide_recording()
                 except RuntimeError:
-                    # Widget has been deleted, ignore the error
                     self.visual_indicator = None
-            # Play stop sound for hotkey-triggered recording (only after initialization)
             if not self._is_initializing:
                 self.play_stop_sound()
-        elif status == "Processing...":
-            self.record_tab.start_button.setEnabled(False)
-            self.record_tab.stop_button.setEnabled(False)
+        elif status == "Processing..." or model_status == "loading":
+            self.record_tab.set_state("loading")
             # Hide visual indicator during processing
             if self.lifecycle_manager.is_widget_active("visual_indicator"):
                 visual_indicator = self.lifecycle_manager.get_widget("visual_indicator")

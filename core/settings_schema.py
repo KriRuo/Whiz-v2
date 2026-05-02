@@ -150,6 +150,13 @@ class SettingsSchema:
             default=False,
             description="Minimize to system tray instead of closing"
         )
+
+        self.schema["behavior/run_at_startup"] = SettingSchema(
+            key="behavior/run_at_startup",
+            type=SettingType.BOOLEAN,
+            default=False,
+            description="Start Whiz automatically with Windows (writes HKCU Run registry key)"
+        )
     
     # Audio Settings
         self.schema["audio/input_device"] = SettingSchema(

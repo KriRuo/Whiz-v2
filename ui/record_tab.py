@@ -58,28 +58,22 @@ class RecordTab(BaseTab):
         spacer_widget.setStyleSheet("background-color: transparent;")
         self.main_layout.addWidget(spacer_widget)
         
-        # Action buttons using new components with dark theme styling
-        self.start_button = ActionButton("Start Recording", "primary")
-        self.start_button.setObjectName("StartButton")
-        self.stop_button = ActionButton("Stop Recording", "secondary")
-        self.stop_button.setObjectName("StopButton")
-        self.stop_button.setEnabled(False)
-        
-        # Button group with responsive spacing - centered using horizontal layout
-        responsive_button_spacing = AdaptiveSpacing.get_spacing(LayoutTokens.SPACING_MD)
-        button_group = ButtonGroup([self.start_button, self.stop_button], responsive_button_spacing)
-        
-        # Create horizontal layout for proper centering
+        # Single contextual record button — disabled until model is ready
+        self.record_button = ActionButton("Start Recording", "primary")
+        self.record_button.setObjectName("RecordButton")
+        self.record_button.setEnabled(False)  # disabled while model loads
+        self._recording = False
+
+        # Centre the button
         button_h_layout = QHBoxLayout()
         button_h_layout.addStretch()
-        button_h_layout.addWidget(button_group)
+        button_h_layout.addWidget(self.record_button)
         button_h_layout.addStretch()
-        
+
         self.main_layout.addLayout(button_h_layout)
-        
-        # Wire button events
-        self.start_button.clicked.connect(self._on_start)
-        self.stop_button.clicked.connect(self._on_stop)
+
+        # Wire button event
+        self.record_button.clicked.connect(self._on_record)
         
         # Add responsive spacer between buttons and status text
         buttons_to_status_spacer = QSpacerItem(20, animation_spacing, QSizePolicy.Minimum, QSizePolicy.Fixed)
@@ -122,34 +116,42 @@ class RecordTab(BaseTab):
             self.animation_circle.set_recording(False)
             self.animation_circle.set_processing(False)
     
+    def set_state(self, state: str) -> None:
+        """Drive the single record button.
+
+        state: 'loading' | 'idle' | 'recording'
+        """
+        if state == "recording":
+            self._recording = True
+            self.record_button.setText("Stop Recording")
+            self.record_button.setEnabled(True)
+            self.animation_circle.set_recording(True)
+        elif state == "loading":
+            self._recording = False
+            self.record_button.setText("Start Recording")
+            self.record_button.setEnabled(False)
+            self.animation_circle.set_recording(False)
+        else:  # idle / processing
+            self._recording = False
+            self.record_button.setText("Start Recording")
+            self.record_button.setEnabled(True)
+            self.animation_circle.set_recording(False)
+
     def update_feature_availability(self):
         """Update UI elements based on feature availability"""
         if not hasattr(self.parent_app, 'controller'):
             return
-        
         feature_status = self.parent_app.controller.get_feature_status()
-        
-        # Update recording button availability
         if not feature_status.get("audio_recording", False):
-            self.start_button.setEnabled(False)
-            self.start_button.setToolTip("Audio recording not available on this platform")
+            self.record_button.setEnabled(False)
+            self.record_button.setToolTip("Audio recording not available on this platform")
+
+    def _on_record(self):
+        """Toggle recording on button click."""
+        if self._recording:
+            self.parent_app.stop_recording()
         else:
-            self.start_button.setEnabled(True)
-            self.start_button.setToolTip("Start recording audio")
-
-    def _on_start(self):
-        """Handle start recording button click."""
-        self.parent_app.start_recording()
-        self.animation_circle.set_recording(True)  # Start pulse animation
-        self.start_button.setEnabled(False)
-        self.stop_button.setEnabled(True)
-
-    def _on_stop(self):
-        """Handle stop recording button click."""
-        self.parent_app.stop_recording()
-        self.animation_circle.set_recording(False)  # Stop pulse animation
-        self.start_button.setEnabled(True)
-        self.stop_button.setEnabled(False)
+            self.parent_app.start_recording()
     
     def show_feature_recommendations(self, recommendations):
         """Show recommendations for missing features"""

@@ -61,21 +61,39 @@ class TestRecordTab(unittest.TestCase):
     
     def test_record_tab_has_required_widgets(self):
         """Test that RecordTab has all required UI widgets"""
-        # Check that key widgets exist
         self.assertTrue(hasattr(self.record_tab, 'status_label'))
-        self.assertTrue(hasattr(self.record_tab, 'start_button'))
-        self.assertTrue(hasattr(self.record_tab, 'stop_button'))
+        self.assertTrue(hasattr(self.record_tab, 'record_button'))
         self.assertTrue(hasattr(self.record_tab, 'hotkey_instruction_label'))
-    
-    def test_start_button_functionality(self):
-        """Test that start button calls parent's start_recording method"""
-        self.record_tab.start_button.clicked.emit()
+
+    def test_record_button_click_idle_calls_start_recording(self):
+        """Clicking the button in idle state calls parent's start_recording."""
+        self.record_tab.set_state("idle")
+        self.record_tab.record_button.clicked.emit()
         self.parent_app.start_recording.assert_called_once()
-    
-    def test_stop_button_functionality(self):
-        """Test that stop button calls parent's stop_recording method"""
-        self.record_tab.stop_button.clicked.emit()
+
+    def test_record_button_click_recording_calls_stop_recording(self):
+        """Clicking the button in recording state calls parent's stop_recording."""
+        self.record_tab.set_state("recording")
+        self.record_tab.record_button.clicked.emit()
         self.parent_app.stop_recording.assert_called_once()
+
+    def test_set_state_loading_disables_button(self):
+        """set_state('loading') disables the button and shows 'Start Recording'."""
+        self.record_tab.set_state("loading")
+        self.assertFalse(self.record_tab.record_button.isEnabled())
+        self.assertEqual(self.record_tab.record_button.text(), "Start Recording")
+
+    def test_set_state_recording_enables_stop_label(self):
+        """set_state('recording') enables the button and shows 'Stop Recording'."""
+        self.record_tab.set_state("recording")
+        self.assertTrue(self.record_tab.record_button.isEnabled())
+        self.assertEqual(self.record_tab.record_button.text(), "Stop Recording")
+
+    def test_set_state_idle_enables_start_label(self):
+        """set_state('idle') enables the button and shows 'Start Recording'."""
+        self.record_tab.set_state("idle")
+        self.assertTrue(self.record_tab.record_button.isEnabled())
+        self.assertEqual(self.record_tab.record_button.text(), "Start Recording")
     
     def test_hotkey_instruction_update(self):
         """Test that hotkey instruction label exists and can be updated"""
@@ -94,12 +112,10 @@ class TestRecordTab(unittest.TestCase):
         # The waveform widget should be added to the layout
         self.assertIsNotNone(self.record_tab.parent_app.waveform_widget)
     
-    def test_button_states(self):
-        """Test initial button states"""
-        # Start button should be enabled initially
-        self.assertTrue(self.record_tab.start_button.isEnabled())
-        # Stop button should be disabled initially
-        self.assertFalse(self.record_tab.stop_button.isEnabled())
+    def test_button_initial_state(self):
+        """Button starts in loading state (disabled) while model warms up."""
+        self.assertFalse(self.record_tab.record_button.isEnabled())
+        self.assertEqual(self.record_tab.record_button.text(), "Start Recording")
     
     def test_status_label_content(self):
         """Test that status label shows correct initial content"""
