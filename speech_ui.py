@@ -243,12 +243,9 @@ class SpeechApp(MainWindow):
                 logger.warning("Failed to initialize controller for model loading")
                 return
         
-        # Model loading already started in SpeechController.__init__ — just sync UI state
-        model_status = self.controller.get_model_status()
-        if model_status == "loaded":
-            self.record_tab.set_state("idle")
-        else:
-            self.record_tab.set_state("loading")
+        # Start model loading now that Qt event loop is running (avoids ONNX/ctranslate2 crash)
+        self.record_tab.set_state("loading")
+        self.controller.preload_model()
         self.update_status("Idle")
         
     def start_recording(self):

@@ -92,9 +92,6 @@ class SpeechController:
         self._queued_audio_path: Optional[str] = None
         self._queue_lock = threading.Lock()
 
-        # Eager preload — no timer delay
-        self.preload_model()
-
         logger.info("SpeechController initialized successfully")
     
     # Backward compatibility properties
