@@ -87,7 +87,14 @@ class SpeechController:
         # Initialize cleanup manager and register cleanup tasks
         self.cleanup_manager = get_cleanup_manager()
         self._register_cleanup_tasks()
-        
+
+        # Depth-1 audio queue: holds at most one recording captured while model loads
+        self._queued_audio_path: Optional[str] = None
+        self._queue_lock = threading.Lock()
+
+        # Eager preload — no timer delay
+        self.preload_model()
+
         logger.info("SpeechController initialized successfully")
     
     # Backward compatibility properties
@@ -224,10 +231,16 @@ class SpeechController:
             return "not_loaded"
     
     def preload_model(self):
-        """Preload the Whisper model in a background thread"""
+        """Preload the Whisper model in a background thread, then flush any queued audio."""
         def _background_load():
             self.transcription_service.ensure_model_loaded()
-        
+            with self._queue_lock:
+                queued = self._queued_audio_path
+                self._queued_audio_path = None
+            if queued:
+                logger.info(f"Model ready — transcribing queued audio: {queued}")
+                self._do_transcription(queued)
+
         load_thread = threading.Thread(target=_background_load, daemon=True)
         load_thread.start()
         logger.info("Started background model loading...")
@@ -326,13 +339,13 @@ class SpeechController:
             self.start_recording()
 
     def _transcribe_audio(self, audio_path: str):
-        """Transcribe audio file using TranscriptionService"""
-        # Transcribe asynchronously to avoid blocking
-        threading.Thread(
-            target=self._do_transcription,
-            args=(audio_path,),
-            daemon=True
-        ).start()
+        """Transcribe audio — queues if model is still loading (depth-1, last wins)."""
+        if self.transcription_service.model_loading:
+            with self._queue_lock:
+                self._queued_audio_path = audio_path
+            logger.info(f"Model loading — audio queued (last wins): {audio_path}")
+            return
+        threading.Thread(target=self._do_transcription, args=(audio_path,), daemon=True).start()
 
     def _do_transcription(self, audio_path: str):
         """Perform transcription in background thread"""

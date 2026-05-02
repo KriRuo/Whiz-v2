@@ -99,6 +99,13 @@ class TranscriptionConfig:
     compute_type: str = "int8"  # For faster-whisper: int8, float16, float32
     num_workers: int = 1  # Number of worker threads for async processing
     
+    @property
+    def resolved_model_name(self) -> str:
+        """Actual model identifier to load: appends '.en' for English, except 'large' has no .en variant."""
+        if self.language == "en" and self.model_size != "large":
+            return f"{self.model_size}.en"
+        return self.model_size
+
     def __post_init__(self):
         """Validate configuration"""
         valid_sizes = ["tiny", "base", "small", "medium", "large"]
@@ -164,6 +171,10 @@ class TranscriptionService:
         self._faster_whisper_available = False
         self._cuda_available = False
         
+        # Active device/compute_type set after model loads
+        self._active_device: Optional[str] = None
+        self._active_compute_type: Optional[str] = None
+
         # Status callback for UI updates
         self.status_callback: Optional[Callable[[str], None]] = None
         
@@ -295,28 +306,37 @@ class TranscriptionService:
         raise ModelLoadingError("faster-whisper is not installed. Run: pip install faster-whisper")
     
     def _load_faster_whisper(self) -> bool:
-        """Load faster-whisper model"""
+        """Load faster-whisper model with CUDA auto-select and CPU fallback."""
+        if faster_whisper is None:
+            raise ModelLoadingError("faster-whisper not available")
+
+        model_name = self.config.resolved_model_name
+
+        device = self.config.device
+        if device == "auto":
+            device = "cuda" if self._cuda_available else "cpu"
+
+        compute_type = "float16" if device == "cuda" else "int8"
+
         try:
-            if faster_whisper is None:
-                raise ModelLoadingError("faster-whisper not available")
-            
-            # Determine device
-            device = self.config.device
-            if device == "auto":
-                device = "cuda" if self._cuda_available else "cpu"
-            
-            logger.info(f"Loading faster-whisper model: {self.config.model_size} on {device}")
-            
-            self.model = faster_whisper.WhisperModel(
-                self.config.model_size,
-                device=device,
-                compute_type=self.config.compute_type
-            )
-            
+            logger.info(f"Loading faster-whisper model: {model_name} on {device} ({compute_type})")
+            self.model = faster_whisper.WhisperModel(model_name, device=device, compute_type=compute_type)
+            self._active_device = device
+            self._active_compute_type = compute_type
             logger.info("faster-whisper model loaded successfully")
             return True
-            
         except Exception as e:
+            if device == "cuda":
+                logger.warning(f"CUDA model load failed ({e}), falling back to cpu+int8")
+                try:
+                    self.model = faster_whisper.WhisperModel(model_name, device="cpu", compute_type="int8")
+                    self._active_device = "cpu"
+                    self._active_compute_type = "int8"
+                    logger.info("faster-whisper model loaded on CPU (fallback)")
+                    return True
+                except Exception as cpu_e:
+                    logger.error(f"CPU fallback also failed: {cpu_e}")
+                    raise ModelLoadingError(f"faster-whisper loading failed on both cuda and cpu: {cpu_e}")
             logger.error(f"Failed to load faster-whisper model: {e}")
             raise ModelLoadingError(f"faster-whisper loading failed: {e}")
     
@@ -427,7 +447,10 @@ class TranscriptionService:
             "model_load_error": self.model_load_error,
             "engine": self.config.engine,
             "model_size": self.config.model_size,
-            "language": self.config.language
+            "resolved_model_name": self.config.resolved_model_name,
+            "language": self.config.language,
+            "device": self._active_device,
+            "compute_type": self._active_compute_type,
         }
     
     def health_check(self) -> Dict[str, Any]:

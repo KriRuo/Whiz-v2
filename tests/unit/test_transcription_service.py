@@ -80,6 +80,113 @@ class TestTranscriptionConfig(unittest.TestCase):
         self.assertEqual(config.temperature, 0.0)
         self.assertTrue(config.speed_mode)
 
+    # --- resolved_model_name tests ---
+
+    def test_resolved_model_name_en_appends_dot_en(self):
+        config = TranscriptionConfig(model_size="tiny", language="en")
+        self.assertEqual(config.resolved_model_name, "tiny.en")
+
+    def test_resolved_model_name_large_en_stays_large(self):
+        config = TranscriptionConfig(model_size="large", language="en")
+        self.assertEqual(config.resolved_model_name, "large")
+
+    def test_resolved_model_name_auto_returns_base_size(self):
+        config = TranscriptionConfig(model_size="tiny", language="auto")
+        self.assertEqual(config.resolved_model_name, "tiny")
+
+    def test_resolved_model_name_other_language_returns_base_size(self):
+        config = TranscriptionConfig(model_size="base", language="fr")
+        self.assertEqual(config.resolved_model_name, "base")
+
+    def test_resolved_model_name_all_en_sizes(self):
+        for size in ["tiny", "base", "small", "medium"]:
+            with self.subTest(size=size):
+                config = TranscriptionConfig(model_size=size, language="en")
+                self.assertEqual(config.resolved_model_name, f"{size}.en")
+
+
+class TestDeviceSelection(unittest.TestCase):
+    """Phase 4: CUDA auto-select and CPU fallback"""
+
+    @patch('core.transcription_service.faster_whisper')
+    @patch('core.transcription_service.torch')
+    def test_cuda_available_selects_float16(self, mock_torch, mock_fw):
+        mock_torch.cuda.is_available.return_value = True
+        mock_fw.WhisperModel = Mock(return_value=Mock())
+        config = TranscriptionConfig(model_size="tiny", device="auto", compute_type="int8")
+        service = TranscriptionService(config)
+        service._faster_whisper_available = True
+        service._engines_checked = True
+        service._cuda_available = True
+
+        service.ensure_model_loaded(timeout_seconds=5)
+
+        call_kwargs = mock_fw.WhisperModel.call_args[1]
+        self.assertEqual(call_kwargs["device"], "cuda")
+        self.assertEqual(call_kwargs["compute_type"], "float16")
+
+    @patch('core.transcription_service.faster_whisper')
+    def test_no_cuda_selects_cpu_int8(self, mock_fw):
+        mock_fw.WhisperModel = Mock(return_value=Mock())
+        config = TranscriptionConfig(model_size="tiny", device="auto", compute_type="float16")
+        service = TranscriptionService(config)
+        service._faster_whisper_available = True
+        service._engines_checked = True
+        service._cuda_available = False
+
+        service.ensure_model_loaded(timeout_seconds=5)
+
+        call_kwargs = mock_fw.WhisperModel.call_args[1]
+        self.assertEqual(call_kwargs["device"], "cpu")
+        self.assertEqual(call_kwargs["compute_type"], "int8")
+
+    @patch('core.transcription_service.faster_whisper')
+    def test_cuda_load_failure_falls_back_to_cpu(self, mock_fw):
+        cpu_model = Mock()
+        mock_fw.WhisperModel = Mock(side_effect=[Exception("CUDA OOM"), cpu_model])
+        config = TranscriptionConfig(model_size="tiny", device="auto")
+        service = TranscriptionService(config)
+        service._faster_whisper_available = True
+        service._engines_checked = True
+        service._cuda_available = True
+
+        success = service.ensure_model_loaded(timeout_seconds=5)
+
+        self.assertTrue(success)
+        self.assertIs(service.model, cpu_model)
+
+    @patch('core.transcription_service.faster_whisper')
+    def test_cuda_load_failure_logs_warning(self, mock_fw):
+        cpu_model = Mock()
+        mock_fw.WhisperModel = Mock(side_effect=[Exception("CUDA OOM"), cpu_model])
+        config = TranscriptionConfig(model_size="tiny", device="auto")
+        service = TranscriptionService(config)
+        service._faster_whisper_available = True
+        service._engines_checked = True
+        service._cuda_available = True
+
+        with self.assertLogs('core.transcription_service', level='WARNING') as cm:
+            service.ensure_model_loaded(timeout_seconds=5)
+
+        self.assertTrue(any("cuda" in msg.lower() or "fallback" in msg.lower() for msg in cm.output))
+
+    @patch('core.transcription_service.faster_whisper')
+    @patch('core.transcription_service.torch')
+    def test_get_status_includes_device_and_compute_type(self, mock_torch, mock_fw):
+        mock_torch.cuda.is_available.return_value = False
+        mock_fw.WhisperModel = Mock(return_value=Mock())
+        config = TranscriptionConfig(model_size="tiny", device="auto")
+        service = TranscriptionService(config)
+        service._faster_whisper_available = True
+        service._engines_checked = True
+        service._cuda_available = False
+
+        service.ensure_model_loaded(timeout_seconds=5)
+        status = service.get_status()
+
+        self.assertIn("device", status)
+        self.assertIn("compute_type", status)
+
 
 class TestTranscriptionResult(unittest.TestCase):
     """Test TranscriptionResult data class"""
@@ -203,17 +310,45 @@ class TestTranscriptionService(unittest.TestCase):
         mock_model = Mock()
         mock_whisper_class = Mock(return_value=mock_model)
         mock_faster_whisper.WhisperModel = mock_whisper_class
-        
+
         service = TranscriptionService(self.config)
         service._faster_whisper_available = True
         service._engines_checked = True
-        
+
         success = service.ensure_model_loaded(timeout_seconds=5)
-        
+
         self.assertTrue(success)
         self.assertTrue(service.model_loaded)
         self.assertIsNotNone(service.model)
         mock_whisper_class.assert_called_once()
+
+    @patch('core.transcription_service.faster_whisper')
+    def test_loader_uses_resolved_model_name_for_en(self, mock_faster_whisper):
+        """_load_faster_whisper must pass resolved_model_name (e.g. tiny.en) to WhisperModel"""
+        mock_faster_whisper.WhisperModel = Mock(return_value=Mock())
+        config = TranscriptionConfig(model_size="tiny", language="en")
+        service = TranscriptionService(config)
+        service._faster_whisper_available = True
+        service._engines_checked = True
+
+        service.ensure_model_loaded(timeout_seconds=5)
+
+        call_args = mock_faster_whisper.WhisperModel.call_args
+        self.assertEqual(call_args[0][0], "tiny.en")
+
+    @patch('core.transcription_service.faster_whisper')
+    def test_loader_uses_base_size_for_auto(self, mock_faster_whisper):
+        """loader passes bare model_size when language is auto"""
+        mock_faster_whisper.WhisperModel = Mock(return_value=Mock())
+        config = TranscriptionConfig(model_size="base", language="auto")
+        service = TranscriptionService(config)
+        service._faster_whisper_available = True
+        service._engines_checked = True
+
+        service.ensure_model_loaded(timeout_seconds=5)
+
+        call_args = mock_faster_whisper.WhisperModel.call_args
+        self.assertEqual(call_args[0][0], "base")
     
     @patch('core.transcription_service.faster_whisper')
     def test_transcribe_success_faster_whisper(self, mock_faster_whisper):
