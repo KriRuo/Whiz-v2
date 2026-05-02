@@ -1,462 +1,514 @@
+#!/usr/bin/env python3
 """
-Queue-based transcription service using multiprocessing.
+core/transcription_service.py
+----------------------------
+Standalone transcription service for Whisper-based speech-to-text.
 
-This module isolates faster-whisper/ONNX runtime work from the PyQt process
-to avoid threading/runtime conflicts while preserving a simple client API.
+This service handles:
+- Whisper model loading and management (faster-whisper)
+- Transcription request processing with retry logic
+- Comprehensive error handling and classification
+- Thread-safe model access
+
+Features:
+    - Lazy model loading for fast startup
+    - Configurable model size, language, and temperature
+    - Thread-safe transcription operations
+    - Structured error responses
+    - Retry logic for transient failures
+    - Model caching to avoid reloading
+
+Example:
+    Basic usage:
+        from core.transcription_service import TranscriptionService, TranscriptionConfig
+        
+        config = TranscriptionConfig(
+            model_size="tiny",
+            engine="faster",
+            language="auto",
+            temperature=0.0
+        )
+        
+        service = TranscriptionService(config)
+        result = service.transcribe("path/to/audio.wav")
+        
+        if result.success:
+            print(f"Transcript: {result.text}")
+        else:
+            print(f"Error: {result.error}")
+
+Author: Whiz Development Team
+Version: 2.0.0
 """
 
-from __future__ import annotations
-
-import logging
-import multiprocessing as mp
-import tempfile
+import os
+import threading
 import time
-import faulthandler
-from queue import Empty
-from typing import Any, Callable, Dict, Optional
+from dataclasses import dataclass, field
+from typing import Optional, Dict, Any, Callable
+from enum import Enum
+from pathlib import Path
 
-from core.config import TIMEOUT_CONFIG, WHISPER_CONFIG
+from .logging_config import get_logger
+from .transcription_exceptions import (
+    TranscriptionException, ModelLoadingError, AudioProcessingError,
+    WhisperError, FileIOError, TranscriptionTimeoutError,
+    with_retry, classify_exception
+)
+from .config import TIMEOUT_CONFIG, WHISPER_CONFIG, MEMORY_CONFIG
 
-logger = logging.getLogger(__name__)
-
-# region agent log
 try:
-    import json
-    import os
+    import faster_whisper
+    FASTER_WHISPER_AVAILABLE = True
+except ImportError:
+    faster_whisper = None
+    FASTER_WHISPER_AVAILABLE = False
 
-    def _agent_debug_log(hypothesis_id: str, message: str, data: Dict[str, Any]) -> None:
-        """
-        Lightweight NDJSON logger for debugging faster-whisper worker startup.
-        Writes to .cursor/debug.log in the project root.
-        """
-        try:
-            ts_ms = int(time.time() * 1000)
-            log_path = r"c:\Users\krir\Documents\Solutions\Whiz\.cursor\debug.log"
-            os.makedirs(os.path.dirname(log_path), exist_ok=True)
-            entry = {
-                "id": f"log_{ts_ms}",
-                "timestamp": ts_ms,
-                "location": "core/transcription_service.py",
-                "message": message,
-                "data": data,
-                "runId": "pre-fix",
-                "hypothesisId": hypothesis_id,
-            }
-            with open(log_path, "a", encoding="utf-8") as f:
-                f.write(json.dumps(entry, ensure_ascii=False) + "\n")
-        except Exception:
-            # Never let debug logging break normal execution
-            pass
-except Exception:
-    def _agent_debug_log(hypothesis_id: str, message: str, data: Dict[str, Any]) -> None:  # type: ignore[no-redef]
-        pass
+try:
+    import torch
+    TORCH_AVAILABLE = True
+except ImportError:
+    torch = None
+    TORCH_AVAILABLE = False
+
+logger = get_logger(__name__)
 
 
-def _safe_runtime_fingerprint() -> Dict[str, Any]:
-    try:
-        import os
-        import platform
-        import sys
+class TranscriptionEngine(Enum):
+    """Supported Whisper engines"""
+    FASTER_WHISPER = "faster"
 
+
+class TranscriptionStatus(Enum):
+    """Status of a transcription request"""
+    PENDING = "pending"
+    PROCESSING = "processing"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
+@dataclass
+class TranscriptionConfig:
+    """Configuration for transcription service"""
+    model_size: str = "tiny"  # tiny, base, small, medium, large
+    engine: str = "faster"
+    language: str = "auto"  # Language code or "auto"
+    temperature: float = 0.0  # 0.0-1.0, lower = more accurate
+    speed_mode: bool = True  # Enable speed optimizations
+    device: str = "auto"  # cpu, cuda, or auto
+    compute_type: str = "int8"  # For faster-whisper: int8, float16, float32
+    num_workers: int = 1  # Number of worker threads for async processing
+    
+    def __post_init__(self):
+        """Validate configuration"""
+        valid_sizes = ["tiny", "base", "small", "medium", "large"]
+        if self.model_size not in valid_sizes:
+            raise ValueError(f"Invalid model_size: {self.model_size}. Must be one of {valid_sizes}")
+        
+        if self.engine != "faster":
+            raise ValueError(f"Invalid engine: {self.engine}. Only 'faster' (faster-whisper) is supported.")
+        
+        if not (0.0 <= self.temperature <= 1.0):
+            raise ValueError(f"Invalid temperature: {self.temperature}. Must be between 0.0 and 1.0")
+
+
+@dataclass
+class TranscriptionResult:
+    """Result of a transcription request"""
+    success: bool
+    text: Optional[str] = None
+    error: Optional[str] = None
+    error_type: Optional[str] = None
+    duration_seconds: float = 0.0
+    model_info: Dict[str, Any] = field(default_factory=dict)
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert result to dictionary"""
         return {
-            "python_version": sys.version.split()[0],
-            "python_exe": sys.executable,
-            "platform": platform.platform(),
-            "machine": platform.machine(),
-            "processor": platform.processor(),
-            "cwd": os.getcwd(),
+            "success": self.success,
+            "text": self.text,
+            "error": self.error,
+            "error_type": self.error_type,
+            "duration_seconds": self.duration_seconds,
+            "model_info": self.model_info
         }
-    except Exception:
-        return {}
-
-
-def _safe_library_versions() -> Dict[str, Any]:
-    """
-    Best-effort version capture for faster-whisper stack. Must be safe to call
-    from worker process.
-    """
-    versions: Dict[str, Any] = {}
-    try:
-        import importlib
-
-        fw = importlib.import_module("faster_whisper")
-        versions["faster_whisper"] = getattr(fw, "__version__", None)
-    except Exception:
-        pass
-
-    for pkg in ("ctranslate2", "tokenizers", "huggingface_hub"):
-        try:
-            import importlib
-
-            mod = importlib.import_module(pkg)
-            versions[pkg] = getattr(mod, "__version__", None)
-        except Exception:
-            continue
-
-    return versions
-
-
-def _safe_thread_fingerprint() -> Dict[str, Any]:
-    try:
-        import threading
-
-        cur = threading.current_thread()
-        return {
-            "name": cur.name,
-            "ident": cur.ident,
-            "is_main": cur is threading.main_thread(),
-        }
-    except Exception:
-        return {}
-
-
-def _decode_windows_exitcode(exitcode: Optional[int]) -> str:
-    if exitcode is None:
-        return "None"
-    unsigned = exitcode & 0xFFFFFFFF
-    if unsigned == 0xC0000005:
-        return f"{exitcode} (0x{unsigned:08X} ACCESS_VIOLATION)"
-    return f"{exitcode} (0x{unsigned:08X})"
-# endregion
-
-
-def _transcription_worker_main(
-    request_queue: "mp.queues.Queue",
-    response_queue: "mp.queues.Queue",
-    config: Dict[str, Any],
-) -> None:
-    """Worker process entrypoint for transcription requests."""
-    model = None
-    crash_log_path: Optional[str] = None
-
-    try:
-        pid = mp.current_process().pid if mp.current_process() else "unknown"
-        crash_log_path = os.path.join(
-            tempfile.gettempdir(),
-            f"whiz_worker_crash_{pid}.log",
-        )
-    except Exception:
-        crash_log_path = None
-
-    def _stage(stage: str, payload: Optional[Dict[str, Any]] = None) -> None:
-        if not crash_log_path:
-            return
-        try:
-            with open(crash_log_path, "a", encoding="utf-8") as handle:
-                data = payload or {}
-                handle.write(
-                    f"{time.time():.3f} | {stage} | {json.dumps(data, ensure_ascii=False)}\n"
-                )
-        except Exception:
-            pass
-
-    _stage("worker_entry")
-    if crash_log_path:
-        try:
-            with open(crash_log_path, "a", encoding="utf-8") as handle:
-                faulthandler.enable(file=handle, all_threads=True)
-        except Exception:
-            pass
-
-    _agent_debug_log(
-        "H1",
-        "worker_main_start",
-        {
-            "pid": mp.current_process().pid if mp.current_process() else None,
-            "config": {
-                "model_name": config.get("model_name"),
-                "device": config.get("device"),
-                "compute_type": config.get("compute_type"),
-            },
-            "runtime": _safe_runtime_fingerprint(),
-            "crash_log_path": crash_log_path,
-        },
-    )
-
-    try:
-        _stage("before_import_faster_whisper")
-        from faster_whisper import WhisperModel
-        _stage("after_import_faster_whisper", _safe_library_versions())
-        _agent_debug_log("H1", "worker_import_ok", _safe_library_versions())
-
-        _stage(
-            "before_model_init",
-            {
-                "model_name": config.get("model_name", WHISPER_CONFIG.DEFAULT_MODEL),
-                "device": config.get("device", "cpu"),
-                "compute_type": config.get("compute_type", WHISPER_CONFIG.COMPUTE_TYPE_CPU),
-                "cpu_threads": config.get("cpu_threads", 4),
-                "num_workers": config.get("num_workers", 1),
-            },
-        )
-        model = WhisperModel(
-            config.get("model_name", WHISPER_CONFIG.DEFAULT_MODEL),
-            device=config.get("device", "cpu"),
-            compute_type=config.get("compute_type", WHISPER_CONFIG.COMPUTE_TYPE_CPU),
-            cpu_threads=config.get("cpu_threads", 4),
-            num_workers=config.get("num_workers", 1),
-        )
-        _stage("after_model_init")
-        _agent_debug_log("H2", "worker_model_initialized", {})
-        response_queue.put({"type": "ready"})
-    except Exception as exc:
-        _stage("model_init_exception", {"error": str(exc)})
-        _agent_debug_log("H2", "worker_model_init_failed", {"error": str(exc)})
-        response_queue.put({"type": "error", "error": f"Model init failed: {exc}"})
-        return
-
-    while True:
-        try:
-            request = request_queue.get(timeout=0.5)
-        except Empty:
-            continue
-        except Exception as exc:
-            response_queue.put({"type": "error", "error": f"Request queue error: {exc}"})
-            continue
-
-        if request is None:
-            break
-
-        request_id = request.get("request_id")
-        audio_path = request.get("audio_path")
-        language = request.get("language")
-        temperature = request.get("temperature", WHISPER_CONFIG.DEFAULT_TEMPERATURE)
-        speed_mode = request.get("speed_mode", True)
-
-        try:
-            if speed_mode:
-                transcribe_params = {
-                    "temperature": temperature,
-                    "compression_ratio_threshold": 2.4,
-                    "no_speech_threshold": 0.6,
-                    "condition_on_previous_text": False,
-                    "word_timestamps": False,
-                    "without_timestamps": True,
-                    "vad_filter": WHISPER_CONFIG.VAD_FILTER,
-                    "beam_size": WHISPER_CONFIG.BEAM_SIZE,
-                }
-            else:
-                transcribe_params = {
-                    "temperature": temperature,
-                    "condition_on_previous_text": True,
-                    "word_timestamps": False,
-                    "vad_filter": WHISPER_CONFIG.VAD_FILTER,
-                    "beam_size": WHISPER_CONFIG.BEAM_SIZE,
-                }
-
-            if language and language != "auto":
-                transcribe_params["language"] = language
-
-            started_at = time.time()
-            segments, info = model.transcribe(audio_path, **transcribe_params)
-            segments_list = list(segments) if segments is not None else []
-            text = " ".join(
-                segment.text for segment in segments_list if segment is not None and hasattr(segment, "text")
-            ).strip()
-
-            response_queue.put(
-                {
-                    "type": "result",
-                    "request_id": request_id,
-                    "text": text,
-                    "metadata": {
-                        "duration": getattr(info, "duration", None),
-                        "language": getattr(info, "language", None),
-                        "language_probability": getattr(info, "language_probability", None),
-                        "processing_seconds": time.time() - started_at,
-                        "engine": "faster",
-                        "model": config.get("model_name"),
-                        "device": config.get("device"),
-                    },
-                }
-            )
-        except Exception as exc:
-            response_queue.put(
-                {
-                    "type": "error",
-                    "request_id": request_id,
-                    "error": str(exc),
-                }
-            )
 
 
 class TranscriptionService:
-    """Client API for queue/process-based transcription."""
-
-    def __init__(
-        self,
-        model_name: str,
-        device: str,
-        compute_type: str,
-        worker_target: Optional[Callable[..., None]] = None,
-    ):
-        self.model_name = model_name
-        self.device = device
-        self.compute_type = compute_type
-        self._worker_target = worker_target or _transcription_worker_main
-
-        self._ctx = mp.get_context("spawn")
-        self.request_queue: "mp.queues.Queue" = self._ctx.Queue()
-        self.response_queue: "mp.queues.Queue" = self._ctx.Queue()
-        self.worker_process: Optional[mp.Process] = None
-        self.is_ready = False
-        self._request_counter = 0
-
-    def start(self, timeout_seconds: float = TIMEOUT_CONFIG.MODEL_LOADING_TIMEOUT) -> bool:
-        """Start worker process and wait for readiness signal."""
-        if self.worker_process is not None and self.worker_process.is_alive():
-            return self.is_ready
-
-        config = {
-            "model_name": self.model_name,
-            "device": self.device,
-            "compute_type": self.compute_type,
-        }
-
-        _agent_debug_log(
-            "H3",
-            "service_start_spawning_worker",
-            {"timeout_seconds": timeout_seconds, "config": config, "thread": _safe_thread_fingerprint()},
-        )
-
-        self.worker_process = self._ctx.Process(
-            target=self._worker_target,
-            args=(self.request_queue, self.response_queue, config),
-            daemon=True,
-        )
-        self.worker_process.start()
-
-        _agent_debug_log(
-            "H3",
-            "service_worker_started",
-            {
-                "pid": self.worker_process.pid,
-                "alive": self.worker_process.is_alive(),
-                "thread": _safe_thread_fingerprint(),
-            },
-        )
-
-        try:
-            response = self.response_queue.get(timeout=timeout_seconds)
-        except Empty:
-            pid = getattr(self.worker_process, "pid", None)
-            alive = self.worker_process.is_alive() if self.worker_process else None
-            exitcode = self.worker_process.exitcode if self.worker_process else None
-            logger.error(
-                "Transcription worker did not signal readiness before timeout "
-                f"(pid={pid}, alive={alive}, exitcode={_decode_windows_exitcode(exitcode)})"
-            )
-            _agent_debug_log(
-                "H4",
-                "service_worker_timeout_waiting_ready",
-                {
-                    "pid": pid,
-                    "alive": alive,
-                    "exitcode": exitcode,
-                    "decoded_exitcode": _decode_windows_exitcode(exitcode),
-                },
-            )
-            self.stop()
-            return False
-        except Exception as exc:
-            logger.error(f"Error waiting for worker readiness: {exc}")
-            _agent_debug_log(
-                "H4",
-                "service_worker_wait_exception",
-                {"error": str(exc)},
-            )
-            self.stop()
-            return False
-
-        if response.get("type") == "ready":
-            self.is_ready = True
-            _agent_debug_log(
-                "H3",
-                "service_worker_ready",
-                {"pid": getattr(self.worker_process, "pid", None)},
-            )
-            return True
-
-        logger.error(f"Worker failed to initialize: {response}")
-        _agent_debug_log(
-            "H4",
-            "service_worker_failed_init",
-            {"response": response},
-        )
-        self.stop()
-        return False
-
-    def transcribe(
-        self,
-        audio_path: str,
-        language: Optional[str],
-        temperature: float,
-        speed_mode: bool,
-        timeout_seconds: float = TIMEOUT_CONFIG.TRANSCRIPTION_TIMEOUT,
-    ) -> Optional[Dict[str, Any]]:
-        """Send a transcription request and wait for matching response."""
-        if not self.is_ready or self.worker_process is None or not self.worker_process.is_alive():
-            logger.error("Transcription worker not ready")
-            return None
-
-        self._request_counter += 1
-        request_id = f"req_{self._request_counter}_{int(time.time() * 1000)}"
-        payload = {
-            "type": "transcribe",
-            "request_id": request_id,
-            "audio_path": audio_path,
-            "language": language,
-            "temperature": temperature,
-            "speed_mode": speed_mode,
-        }
-
-        try:
-            self.request_queue.put(payload)
-        except Exception as exc:
-            logger.error(f"Failed to enqueue transcription request: {exc}")
-            return None
-
-        started_at = time.time()
-        while time.time() - started_at <= timeout_seconds:
+    """
+    Standalone service for Whisper-based transcription.
+    
+    This service manages Whisper model lifecycle and processes transcription
+    requests with comprehensive error handling and retry logic.
+    """
+    
+    def __init__(self, config: TranscriptionConfig):
+        """
+        Initialize transcription service.
+        
+        Args:
+            config: TranscriptionConfig instance with model settings
+        """
+        self.config = config
+        self.model = None
+        self.model_loaded = False
+        self.model_loading = False
+        self.model_load_error: Optional[str] = None
+        
+        # Thread safety
+        self._model_lock = threading.Lock()
+        self._model_condition = threading.Condition(self._model_lock)
+        
+        # Engine availability (checked lazily)
+        self._engines_checked = False
+        self._faster_whisper_available = False
+        self._cuda_available = False
+        
+        # Status callback for UI updates
+        self.status_callback: Optional[Callable[[str], None]] = None
+        
+        logger.info(f"TranscriptionService initialized with engine={config.engine}, model={config.model_size}")
+    
+    def set_status_callback(self, callback: Callable[[str], None]):
+        """Set callback for status updates"""
+        self.status_callback = callback
+    
+    def _update_status(self, message: str):
+        """Update status via callback if available"""
+        if self.status_callback:
             try:
-                response = self.response_queue.get(timeout=0.5)
-            except Empty:
-                continue
-            except Exception as exc:
-                logger.error(f"Failed to read worker response: {exc}")
-                return None
+                self.status_callback(message)
+            except Exception as e:
+                logger.warning(f"Status callback failed: {e}")
+    
+    def _check_engine_availability(self):
+        """Check which Whisper engines are available"""
+        if self._engines_checked:
+            return
+        
+        # Check faster-whisper
+        self._faster_whisper_available = FASTER_WHISPER_AVAILABLE
+        if self._faster_whisper_available:
+            logger.info("faster-whisper engine available")
+        else:
+            logger.warning("faster-whisper not available")
 
-            if response.get("request_id") != request_id and response.get("type") != "error":
-                continue
-
-            response_type = response.get("type")
-            if response_type == "result" and response.get("request_id") == request_id:
-                return {
-                    "text": response.get("text", ""),
-                    "metadata": response.get("metadata", {}),
-                }
-
-            if response_type == "error":
-                if response.get("request_id") in (None, request_id):
-                    logger.error(f"Worker transcription error: {response.get('error')}")
-                    return None
-
-        logger.error(f"Transcription request timed out after {timeout_seconds}s")
-        return None
-
-    def stop(self) -> None:
-        """Stop worker process and clear ready state."""
+        # Check CUDA availability
+        if TORCH_AVAILABLE:
+            self._cuda_available = torch.cuda.is_available()
+            logger.info(f"CUDA available: {self._cuda_available}")
+        else:
+            logger.info("PyTorch not available, CUDA check skipped")
+        
+        self._engines_checked = True
+    
+    def is_model_loaded(self) -> bool:
+        """Check if model is loaded and ready"""
+        return self.model_loaded and self.model is not None
+    
+    def ensure_model_loaded(self, timeout_seconds: Optional[int] = None) -> bool:
+        """
+        Ensure Whisper model is loaded, loading it if necessary.
+        
+        Args:
+            timeout_seconds: Maximum time to wait for model loading
+            
+        Returns:
+            True if model is ready, False if timeout or error
+        """
+        if timeout_seconds is None:
+            timeout_seconds = TIMEOUT_CONFIG.MODEL_LOADING_TIMEOUT
+        
+        with self._model_condition:
+            # If model is already loaded, return immediately
+            if self.model_loaded:
+                return True
+            
+            # If there's a previous load error, don't try again
+            if self.model_load_error:
+                logger.warning(f"Model load previously failed: {self.model_load_error}")
+                return False
+            
+            # If model is currently loading, wait for it
+            if self.model_loading:
+                logger.info("Model is loading, waiting for completion...")
+                self._update_status("Model loading, please wait...")
+                
+                if not self._model_condition.wait(timeout_seconds):
+                    logger.error(f"Model loading timeout after {timeout_seconds} seconds")
+                    self._update_status("Model loading timeout")
+                    return False
+                
+                return self.model_loaded
+            
+            # Start loading the model
+            logger.info("Starting model loading...")
+            self.model_loading = True
+            self._update_status(f"Loading {self.config.engine} Whisper model...")
+        
+        # Load model outside the lock
         try:
-            if self.worker_process is not None and self.worker_process.is_alive():
-                try:
-                    self.request_queue.put(None)
-                except Exception:
-                    pass
+            success = self._load_model()
+            
+            with self._model_condition:
+                if success:
+                    self.model_loaded = True
+                    self.model_load_error = None
+                    logger.info(f"{self.config.engine.title()} model loaded successfully!")
+                    self._update_status(f"{self.config.engine.title()} model loaded successfully!")
+                else:
+                    self.model_load_error = "Model loading failed"
+                    logger.error("Model loading failed")
+                    self._update_status("Model loading failed")
+                
+                self.model_loading = False
+                self._model_condition.notify_all()
+                
+                return success
+                
+        except Exception as e:
+            with self._model_condition:
+                self.model_loading = False
+                self.model_load_error = f"Unexpected error: {e}"
+                logger.error(f"Unexpected error loading Whisper model: {e}")
+                self._update_status(f"Error loading model: {e}")
+                self._model_condition.notify_all()
+                return False
+    
+    @with_retry("model_loading")
+    def _load_model(self) -> bool:
+        """
+        Internal method to load the Whisper model with retry logic.
+        
+        Returns:
+            True if model loaded successfully, False otherwise
+        """
+        self._check_engine_availability()
+        
+        # Determine which engine to use
+        engine = self.config.engine.lower()
+        
+        if self._faster_whisper_available:
+            return self._load_faster_whisper()
 
-                self.worker_process.join(timeout=3.0)
-                if self.worker_process.is_alive():
-                    self.worker_process.terminate()
-                    self.worker_process.join(timeout=2.0)
-        finally:
-            self.worker_process = None
-            self.is_ready = False
+        logger.error("faster-whisper not available!")
+        raise ModelLoadingError("faster-whisper is not installed. Run: pip install faster-whisper")
+    
+    def _load_faster_whisper(self) -> bool:
+        """Load faster-whisper model"""
+        try:
+            if faster_whisper is None:
+                raise ModelLoadingError("faster-whisper not available")
+            
+            # Determine device
+            device = self.config.device
+            if device == "auto":
+                device = "cuda" if self._cuda_available else "cpu"
+            
+            logger.info(f"Loading faster-whisper model: {self.config.model_size} on {device}")
+            
+            self.model = faster_whisper.WhisperModel(
+                self.config.model_size,
+                device=device,
+                compute_type=self.config.compute_type
+            )
+            
+            logger.info("faster-whisper model loaded successfully")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to load faster-whisper model: {e}")
+            raise ModelLoadingError(f"faster-whisper loading failed: {e}")
+    
+    def transcribe(self, audio_path: str) -> TranscriptionResult:
+        """
+        Transcribe audio file to text.
+        
+        Args:
+            audio_path: Path to audio file (WAV format)
+            
+        Returns:
+            TranscriptionResult with text or error information
+        """
+        start_time = time.time()
+        
+        # Validate audio file exists
+        if not Path(audio_path).exists():
+            return TranscriptionResult(
+                success=False,
+                error=f"Audio file not found: {audio_path}",
+                error_type="FileNotFound"
+            )
+        
+        # Ensure model is loaded
+        if not self.ensure_model_loaded():
+            return TranscriptionResult(
+                success=False,
+                error="Failed to load Whisper model",
+                error_type="ModelLoadingError",
+                duration_seconds=time.time() - start_time
+            )
+        
+        # Perform transcription
+        try:
+            self._update_status("Transcribing...")
+            
+            result = self._transcribe_faster_whisper(audio_path)
+            
+            duration = time.time() - start_time
+            result.duration_seconds = duration
+            
+            if result.success:
+                logger.info(f"Transcription completed in {duration:.2f}s: {result.text[:50]}...")
+                self._update_status("Transcription complete!")
+            
+            return result
+            
+        except Exception as e:
+            duration = time.time() - start_time
+            error_type = type(e).__name__
+            logger.error(f"Transcription failed: {e}")
+            
+            return TranscriptionResult(
+                success=False,
+                error=str(e),
+                error_type=error_type,
+                duration_seconds=duration
+            )
+    
+    @with_retry("transcription")
+    def _transcribe_faster_whisper(self, audio_path: str) -> TranscriptionResult:
+        """Transcribe using faster-whisper"""
+        try:
+            # Configure transcription parameters
+            kwargs = {}
+            if self.config.language != "auto":
+                kwargs["language"] = self.config.language
+            
+            kwargs["temperature"] = self.config.temperature
+            
+            # Transcribe
+            segments, info = self.model.transcribe(audio_path, **kwargs)
+            
+            # Collect segments
+            text = " ".join([segment.text for segment in segments]).strip()
+            
+            model_info = {
+                "engine": "faster-whisper",
+                "model_size": self.config.model_size,
+                "language": info.language if hasattr(info, 'language') else self.config.language,
+                "duration": info.duration if hasattr(info, 'duration') else 0.0
+            }
+            
+            return TranscriptionResult(
+                success=True,
+                text=text,
+                model_info=model_info
+            )
+            
+        except Exception as e:
+            logger.error(f"faster-whisper transcription failed: {e}")
+            raise WhisperError(f"faster-whisper transcription failed: {e}")
+    
+    def unload_model(self):
+        """Unload the model to free memory"""
+        with self._model_lock:
+            if self.model is not None:
+                logger.info("Unloading Whisper model...")
+                self.model = None
+                self.model_loaded = False
+                logger.info("Model unloaded successfully")
+    
+    def get_status(self) -> Dict[str, Any]:
+        """Get current service status"""
+        return {
+            "model_loaded": self.model_loaded,
+            "model_loading": self.model_loading,
+            "model_load_error": self.model_load_error,
+            "engine": self.config.engine,
+            "model_size": self.config.model_size,
+            "language": self.config.language
+        }
+    
+    def health_check(self) -> Dict[str, Any]:
+        """
+        Perform health check on the transcription service.
+        
+        Returns:
+            Dictionary with health status information
+        """
+        from .service_health import HealthStatus, HealthCheckResult
+        
+        # Check if we can load the model
+        if self.model_load_error:
+            result = HealthCheckResult(
+                status=HealthStatus.UNHEALTHY,
+                service_name="TranscriptionService",
+                message=f"Model loading failed: {self.model_load_error}",
+                details={"error": self.model_load_error}
+            )
+        elif self.model_loaded:
+            result = HealthCheckResult(
+                status=HealthStatus.HEALTHY,
+                service_name="TranscriptionService",
+                message="Model loaded and ready",
+                details={
+                    "engine": self.config.engine,
+                    "model_size": self.config.model_size,
+                    "cuda_available": self._cuda_available
+                }
+            )
+        elif self.model_loading:
+            result = HealthCheckResult(
+                status=HealthStatus.DEGRADED,
+                service_name="TranscriptionService",
+                message="Model is currently loading",
+                details={"status": "loading"}
+            )
+        else:
+            result = HealthCheckResult(
+                status=HealthStatus.HEALTHY,
+                service_name="TranscriptionService",
+                message="Service ready, model not loaded (lazy loading)",
+                details={"status": "ready"}
+            )
+        
+        return result.to_dict()
+    
+    def readiness_check(self) -> Dict[str, Any]:
+        """
+        Check if service is ready to accept requests.
+        
+        Returns:
+            Dictionary with readiness status
+        """
+        from .service_health import ReadinessStatus, ReadinessCheckResult
+        
+        # Check engine availability
+        self._check_engine_availability()
+        
+        engine_available = self._faster_whisper_available
+        
+        if not engine_available:
+            result = ReadinessCheckResult(
+                status=ReadinessStatus.NOT_READY,
+                service_name="TranscriptionService",
+                message=f"Engine '{self.config.engine}' is not available",
+                dependencies_ready=False
+            )
+        elif self.model_loading:
+            result = ReadinessCheckResult(
+                status=ReadinessStatus.INITIALIZING,
+                service_name="TranscriptionService",
+                message="Model is loading",
+                dependencies_ready=True
+            )
+        else:
+            result = ReadinessCheckResult(
+                status=ReadinessStatus.READY,
+                service_name="TranscriptionService",
+                message="Service is ready to accept requests",
+                dependencies_ready=True
+            )
+        
+        return result.to_dict()

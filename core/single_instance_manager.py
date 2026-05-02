@@ -294,16 +294,6 @@ class SingleInstanceManager:
                 if self.shared_memory.isAttached():
                     self.shared_memory.detach()
                 
-                # On Unix systems, we need to explicitly remove the shared memory segment
-                if sys.platform != "win32":
-                    try:
-                        self.shared_memory.detach()
-                        # The shared memory will be automatically cleaned up by the OS
-                        # when no processes are attached, but we can try to remove it
-                        if hasattr(self.shared_memory, 'key') and self.shared_memory.key():
-                            logger.debug("Qt shared memory cleaned up")
-                    except Exception as e:
-                        logger.debug(f"Error cleaning up Qt shared memory: {e}")
         except Exception as e:
             logger.warning(f"Error in Qt lock cleanup: {e}")
     
@@ -328,13 +318,6 @@ class SingleInstanceManager:
         # Register atexit handler
         atexit.register(self._cleanup_on_exit)
         
-        # Register signal handlers (Unix)
-        if sys.platform != "win32":
-            try:
-                signal.signal(signal.SIGTERM, self._signal_handler)
-                signal.signal(signal.SIGINT, self._signal_handler)
-            except Exception as e:
-                logger.warning(f"Could not register signal handlers: {e}")
     
     def _cleanup_on_exit(self) -> None:
         """Cleanup handler called on normal exit."""
@@ -407,15 +390,7 @@ class SingleInstanceManager:
             True if window was activated successfully, False otherwise
         """
         try:
-            if sys.platform == "win32":
-                return self._activate_window_windows()
-            elif sys.platform == "darwin":
-                return self._activate_window_macos()
-            elif sys.platform.startswith("linux"):
-                return self._activate_window_linux()
-            else:
-                logger.warning(f"Window activation not supported on platform: {sys.platform}")
-                return False
+            return self._activate_window_windows()
         except Exception as e:
             logger.error(f"Error activating existing window: {e}")
             return False
@@ -458,85 +433,6 @@ class SingleInstanceManager:
                 
         except Exception as e:
             logger.error(f"Error activating Windows window: {e}")
-            return False
-    
-    def _activate_window_macos(self) -> bool:
-        """Activate window on macOS using AppleScript."""
-        try:
-            import subprocess
-            
-            # Use AppleScript to activate Whiz application
-            script = '''
-            tell application "System Events"
-                set whizProcesses to (every process whose name contains "Whiz")
-                if (count of whizProcesses) > 0 then
-                    set frontmost of item 1 of whizProcesses to true
-                    return "activated"
-                else
-                    return "not_found"
-                end if
-            end tell
-            '''
-            
-            result = subprocess.run(
-                ["osascript", "-e", script],
-                capture_output=True,
-                text=True,
-                timeout=5
-            )
-            
-            if result.returncode == 0 and "activated" in result.stdout:
-                logger.info("macOS window activated successfully")
-                return True
-            else:
-                logger.warning(f"Failed to activate macOS window: {result.stderr}")
-                return False
-                
-        except subprocess.TimeoutExpired:
-            logger.warning("AppleScript timeout when activating macOS window")
-            return False
-        except Exception as e:
-            logger.error(f"Error activating macOS window: {e}")
-            return False
-    
-    def _activate_window_linux(self) -> bool:
-        """Activate window on Linux using wmctrl."""
-        try:
-            import subprocess
-            
-            # Try wmctrl first (most common)
-            try:
-                result = subprocess.run(
-                    ["wmctrl", "-a", "Whiz"],
-                    capture_output=True,
-                    text=True,
-                    timeout=5
-                )
-                if result.returncode == 0:
-                    logger.info("Linux window activated successfully with wmctrl")
-                    return True
-            except (subprocess.TimeoutExpired, FileNotFoundError):
-                pass
-            
-            # Fallback to xdotool
-            try:
-                result = subprocess.run(
-                    ["xdotool", "search", "--name", "Whiz", "windowactivate"],
-                    capture_output=True,
-                    text=True,
-                    timeout=5
-                )
-                if result.returncode == 0:
-                    logger.info("Linux window activated successfully with xdotool")
-                    return True
-            except (subprocess.TimeoutExpired, FileNotFoundError):
-                pass
-            
-            logger.warning("No window manager tool available for Linux activation")
-            return False
-            
-        except Exception as e:
-            logger.error(f"Error activating Linux window: {e}")
             return False
     
     def cleanup_for_manager(self) -> bool:

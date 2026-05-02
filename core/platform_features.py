@@ -114,31 +114,7 @@ class PlatformFeatures:
             # Check platform-specific requirements
             platform = PlatformUtils.get_platform()
             
-            if platform == PlatformType.MACOS:
-                # macOS requires accessibility permissions
-                features["permissions_required"] = True
-                features["permission_type"] = "accessibility"
-                features["permission_message"] = (
-                    "macOS requires accessibility permissions for global hotkeys. "
-                    "Please enable 'Whiz' in System Preferences > Security & Privacy > Privacy > Accessibility."
-                )
-            elif platform == PlatformType.LINUX:
-                # Linux may require X11 or Wayland
-                if sys.platform.startswith('linux'):
-                    display = sys.environ.get('DISPLAY')
-                    wayland_display = sys.environ.get('WAYLAND_DISPLAY')
-                    
-                    if display or wayland_display:
-                        features["permissions_required"] = False
-                    else:
-                        features["permissions_required"] = True
-                        features["permission_type"] = "display_server"
-                        features["permission_message"] = (
-                            "Linux requires a display server (X11 or Wayland) for global hotkeys."
-                        )
-            elif platform == PlatformType.WINDOWS:
-                # Windows generally works without special permissions
-                features["permissions_required"] = False
+            features["permissions_required"] = False
             
         except ImportError:
             logger.warning("pynput not available")
@@ -176,26 +152,7 @@ class PlatformFeatures:
             # Check platform-specific requirements
             platform = PlatformUtils.get_platform()
             
-            if platform == PlatformType.MACOS:
-                # macOS may require accessibility permissions for text pasting
-                features["permissions_required"] = True
-                features["permission_type"] = "accessibility"
-                features["permission_message"] = (
-                    "macOS may require accessibility permissions for auto-paste. "
-                    "Please enable 'Whiz' in System Preferences > Security & Privacy > Privacy > Accessibility."
-                )
-            elif platform == PlatformType.LINUX:
-                # Linux may require X11 or Wayland
-                if sys.platform.startswith('linux'):
-                    display = sys.environ.get('DISPLAY')
-                    wayland_display = sys.environ.get('WAYLAND_DISPLAY')
-                    
-                    if not (display or wayland_display):
-                        features["permissions_required"] = True
-                        features["permission_type"] = "display_server"
-                        features["permission_message"] = (
-                            "Linux requires a display server (X11 or Wayland) for auto-paste."
-                        )
+            features["permissions_required"] = False
             
         except ImportError:
             logger.warning("pyautogui not available")
@@ -215,32 +172,10 @@ class PlatformFeatures:
         
         platform = PlatformUtils.get_platform()
         
-        if platform == PlatformType.WINDOWS:
-            features["notifications"] = FeatureStatus.AVAILABLE
-            features["system_tray"] = FeatureStatus.AVAILABLE
-            features["startup_integration"] = FeatureStatus.AVAILABLE
-            features["file_associations"] = FeatureStatus.AVAILABLE
-            
-        elif platform == PlatformType.MACOS:
-            features["notifications"] = FeatureStatus.AVAILABLE
-            features["system_tray"] = FeatureStatus.LIMITED  # Menu bar instead
-            features["startup_integration"] = FeatureStatus.AVAILABLE
-            features["file_associations"] = FeatureStatus.AVAILABLE
-            
-        elif platform == PlatformType.LINUX:
-            # Linux depends on desktop environment
-            desktop = sys.environ.get('XDG_CURRENT_DESKTOP', '').lower()
-            
-            if desktop in ['gnome', 'kde', 'xfce', 'lxde', 'mate']:
-                features["notifications"] = FeatureStatus.AVAILABLE
-                features["system_tray"] = FeatureStatus.AVAILABLE
-                features["startup_integration"] = FeatureStatus.AVAILABLE
-            else:
-                features["notifications"] = FeatureStatus.LIMITED
-                features["system_tray"] = FeatureStatus.LIMITED
-                features["startup_integration"] = FeatureStatus.LIMITED
-            
-            features["file_associations"] = FeatureStatus.AVAILABLE
+        features["notifications"] = FeatureStatus.AVAILABLE
+        features["system_tray"] = FeatureStatus.AVAILABLE
+        features["startup_integration"] = FeatureStatus.AVAILABLE
+        features["file_associations"] = FeatureStatus.AVAILABLE
         
         return features
     
@@ -261,17 +196,7 @@ class PlatformFeatures:
         else:
             features["admin_required"] = False  # Not required for basic functionality
         
-        # Check platform-specific requirements
-        if platform == PlatformType.MACOS:
-            features["accessibility_required"] = True
-            features["permission_instructions"] = {
-                "accessibility": "System Preferences > Security & Privacy > Privacy > Accessibility",
-                "microphone": "System Preferences > Security & Privacy > Privacy > Microphone"
-            }
-        elif platform == PlatformType.LINUX:
-            features["accessibility_required"] = False  # Depends on desktop environment
-        elif platform == PlatformType.WINDOWS:
-            features["accessibility_required"] = False  # Generally not required
+        features["accessibility_required"] = False
         
         return features
     
@@ -286,23 +211,10 @@ class PlatformFeatures:
         
         platform = PlatformUtils.get_platform()
         
-        if platform == PlatformType.WINDOWS:
-            features["custom_titlebar"] = FeatureStatus.AVAILABLE
-            features["dark_mode"] = FeatureStatus.AVAILABLE
-            features["high_dpi"] = FeatureStatus.AVAILABLE
-            features["transparency"] = FeatureStatus.AVAILABLE
-            
-        elif platform == PlatformType.MACOS:
-            features["custom_titlebar"] = FeatureStatus.LIMITED  # Different approach needed
-            features["dark_mode"] = FeatureStatus.AVAILABLE
-            features["high_dpi"] = FeatureStatus.AVAILABLE
-            features["transparency"] = FeatureStatus.AVAILABLE
-            
-        elif platform == PlatformType.LINUX:
-            features["custom_titlebar"] = FeatureStatus.LIMITED  # Depends on window manager
-            features["dark_mode"] = FeatureStatus.AVAILABLE
-            features["high_dpi"] = FeatureStatus.LIMITED  # Depends on desktop environment
-            features["transparency"] = FeatureStatus.LIMITED  # Depends on compositor
+        features["custom_titlebar"] = FeatureStatus.AVAILABLE
+        features["dark_mode"] = FeatureStatus.AVAILABLE
+        features["high_dpi"] = FeatureStatus.AVAILABLE
+        features["transparency"] = FeatureStatus.AVAILABLE
         
         return features
     
@@ -414,26 +326,5 @@ class PlatformFeatures:
         
         if not self.is_feature_available("autopaste.text_pasting"):
             recommendations["install_packages"].append("pyautogui")
-        
-        # Check for permission requirements
-        permissions = features.get("permissions", {})
-        if permissions.get("accessibility_required", False):
-            platform = PlatformUtils.get_platform()
-            if platform == PlatformType.MACOS:
-                recommendations["enable_permissions"].append({
-                    "type": "accessibility",
-                    "description": "Enable accessibility permissions for global hotkeys",
-                    "instructions": "System Preferences > Security & Privacy > Privacy > Accessibility"
-                })
-        
-        # Check for system requirements
-        platform = PlatformUtils.get_platform()
-        if platform == PlatformType.LINUX:
-            if not sys.environ.get('DISPLAY') and not sys.environ.get('WAYLAND_DISPLAY'):
-                recommendations["system_requirements"].append({
-                    "requirement": "Display Server",
-                    "description": "Linux requires X11 or Wayland for GUI features",
-                    "solutions": ["Install X11 server", "Use Wayland session"]
-                })
         
         return recommendations

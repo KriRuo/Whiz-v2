@@ -431,24 +431,6 @@ class PreferencesDialog(BaseDialog):
         
         layout.addWidget(language_section)
         
-        # Engine Settings Section
-        engine_section = SettingsSection("Transcription Engine", layout_type="form")
-        
-        # Engine selection
-        self.engine_combo = self.create_styled_combobox(["faster", "openai"])  # faster first as it's the default
-        engine_section.layout().addRow("Engine:", self.engine_combo)
-        
-        # Engine info
-        engine_info = InfoLabel(
-            "• faster: Faster-whisper implementation (5-10x faster, recommended, default)\n"
-            "• openai: Original Whisper implementation (slower but very stable)\n\n"
-            "Note: faster-whisper uses INT8 quantization for efficient CPU inference.\n"
-            "Falls back to openai automatically if faster-whisper is unavailable."
-        )
-        engine_section.layout().addRow(engine_info)
-        
-        layout.addWidget(engine_section)
-        
         layout.addStretch()
         self.tab_widget.addTab(tab, "General")
     
@@ -766,11 +748,6 @@ class PreferencesDialog(BaseDialog):
             if language_index >= 0:
                 self.language_combo.setCurrentIndex(language_index)
             
-            engine_value = self.current_settings.get("whisper/engine", "faster")
-            engine_index = self.engine_combo.findText(engine_value)
-            if engine_index >= 0:
-                self.engine_combo.setCurrentIndex(engine_index)
-            
             # Behavior settings
             self.auto_paste_checkbox.setChecked(self.current_settings.get("behavior/auto_paste", True))
             self.toggle_mode_checkbox.setChecked(self.current_settings.get("behavior/toggle_mode", False))
@@ -817,7 +794,6 @@ class PreferencesDialog(BaseDialog):
             # Disconnect combo box signals
             self.theme_combo.currentTextChanged.disconnect()
             self.language_combo.currentTextChanged.disconnect()
-            self.engine_combo.currentTextChanged.disconnect()
             self.indicator_position_combo.currentTextChanged.disconnect()
             self.hotkey_combo.currentTextChanged.disconnect()
             self.model_combo.currentTextChanged.disconnect()
@@ -847,7 +823,6 @@ class PreferencesDialog(BaseDialog):
         # Connect combo box signals
         self.theme_combo.currentTextChanged.connect(self.on_setting_changed)
         self.language_combo.currentTextChanged.connect(self.on_setting_changed)
-        self.engine_combo.currentTextChanged.connect(self.on_setting_changed)
         self.indicator_position_combo.currentTextChanged.connect(self.on_setting_changed)
         self.hotkey_combo.currentTextChanged.connect(self.on_setting_changed)
         self.model_combo.currentTextChanged.connect(self.on_setting_changed)
@@ -901,7 +876,6 @@ class PreferencesDialog(BaseDialog):
             settings = {
                 "ui/theme": self.theme_combo.currentText(),
                 "whisper/language": self.language_combo.currentText(),
-                "whisper/engine": self.engine_combo.currentText(),
                 "behavior/auto_paste": self.auto_paste_checkbox.isChecked(),
                 "behavior/toggle_mode": self.toggle_mode_checkbox.isChecked(),
                 "behavior/minimize_to_tray": self.minimize_to_tray_checkbox.isChecked(),

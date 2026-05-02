@@ -43,10 +43,9 @@ class MemoryConfig:
 @dataclass(frozen=True)
 class WhisperConfig:
     """Whisper model configuration"""
-    DEFAULT_ENGINE: Final[str] = "faster"  # Default to faster-whisper
-    AVAILABLE_ENGINES: Final[tuple] = ("openai", "faster")
+    DEFAULT_ENGINE: Final[str] = "faster"
     AVAILABLE_MODELS: Final[tuple] = ("tiny", "base", "small", "medium", "large")
-    DEFAULT_MODEL: Final[str] = "tiny"
+    DEFAULT_MODEL: Final[str] = "base"
     DEFAULT_TEMPERATURE: Final[float] = 0.0  # Most deterministic
     DEFAULT_LANGUAGE: Final[str] = "auto"  # Auto-detect language
     

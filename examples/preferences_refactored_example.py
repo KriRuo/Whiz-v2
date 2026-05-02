@@ -68,24 +68,6 @@ class RefactoredGeneralTab:
         
         layout.addWidget(language_section)
         
-        # ===== Engine Settings Section =====
-        engine_section = SettingsSection("Transcription Engine", layout_type="form")
-        
-        # Engine selection
-        self.engine_combo = self.create_styled_combobox(["faster", "openai"])
-        engine_section.layout().addRow("Engine:", self.engine_combo)
-        
-        # Engine info
-        engine_info = InfoLabel(
-            "• faster: Faster-whisper implementation (5-10x faster, recommended, default)\n"
-            "• openai: Original Whisper implementation (slower but very stable)\n\n"
-            "Note: faster-whisper uses INT8 quantization for efficient CPU inference.\n"
-            "Falls back to openai automatically if faster-whisper is unavailable."
-        )
-        engine_section.layout().addRow(engine_info)
-        
-        layout.addWidget(engine_section)
-        
         layout.addStretch()
         self.tab_widget.addTab(tab, "General")
 
