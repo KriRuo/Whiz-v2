@@ -115,12 +115,23 @@ class TestRecordingService(unittest.TestCase):
         )
     
     @patch('core.recording_service.AudioManager')
+    def test_audio_manager_is_accessible(self, mock_audio_manager_class):
+        """audio_manager must be accessible on the service (main.py and preferences_dialog use it)"""
+        mock_audio_manager = Mock()
+        mock_audio_manager.is_available.return_value = True
+        mock_audio_manager_class.return_value = mock_audio_manager
+
+        service = RecordingService(self.config)
+        self.assertIsNotNone(service.audio_manager)
+        self.assertIs(service.audio_manager, mock_audio_manager)
+
+    @patch('core.recording_service.AudioManager')
     def test_service_initialization(self, mock_audio_manager_class):
         """Test that service initializes correctly"""
         mock_audio_manager = Mock()
         mock_audio_manager.is_available.return_value = True
         mock_audio_manager_class.return_value = mock_audio_manager
-        
+
         service = RecordingService(self.config)
         
         self.assertIsNotNone(service)

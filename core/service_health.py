@@ -41,8 +41,8 @@ class HealthCheckResult:
     """Result of a health check"""
     status: HealthStatus
     service_name: str
-    timestamp: datetime = field(default_factory=datetime.now)
     message: str = ""
+    timestamp: datetime = field(default_factory=datetime.now)
     details: Dict[str, Any] = field(default_factory=dict)
     
     def to_dict(self) -> Dict[str, Any]:
@@ -65,8 +65,8 @@ class ReadinessCheckResult:
     """Result of a readiness check"""
     status: ReadinessStatus
     service_name: str
-    timestamp: datetime = field(default_factory=datetime.now)
     message: str = ""
+    timestamp: datetime = field(default_factory=datetime.now)
     dependencies_ready: bool = True
     
     def to_dict(self) -> Dict[str, Any]:

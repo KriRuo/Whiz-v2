@@ -90,7 +90,7 @@ class TranscriptionStatus(Enum):
 @dataclass
 class TranscriptionConfig:
     """Configuration for transcription service"""
-    model_size: str = "base"  # tiny, base, small, medium, large
+    model_size: str = "tiny"  # tiny, base, small, medium, large
     engine: str = "faster"
     language: str = "auto"  # Language code or "auto"
     temperature: float = 0.0  # 0.0-1.0, lower = more accurate

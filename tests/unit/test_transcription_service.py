@@ -52,6 +52,16 @@ class TestTranscriptionConfig(unittest.TestCase):
         with self.assertRaises(ValueError) as cm:
             TranscriptionConfig(engine="invalid")
         self.assertIn("Invalid engine", str(cm.exception))
+
+    def test_openai_engine_rejected(self):
+        """openai engine was removed; ensure it raises rather than silently misbehaving"""
+        with self.assertRaises(ValueError):
+            TranscriptionConfig(engine="openai")
+
+    def test_faster_is_the_only_valid_engine(self):
+        """'faster' must be accepted without raising — guards main.py settings default"""
+        config = TranscriptionConfig(engine="faster")
+        self.assertEqual(config.engine, "faster")
     
     def test_invalid_temperature(self):
         """Test that invalid temperature raises error"""
@@ -205,24 +215,6 @@ class TestTranscriptionService(unittest.TestCase):
         self.assertIsNotNone(service.model)
         mock_whisper_class.assert_called_once()
     
-    @patch('core.transcription_service.whisper')
-    def test_load_openai_whisper_model(self, mock_whisper):
-        """Test loading openai-whisper model"""
-        mock_model = Mock()
-        mock_whisper.load_model.return_value = mock_model
-        
-        config = TranscriptionConfig(engine="openai")
-        service = TranscriptionService(config)
-        service._openai_whisper_available = True
-        service._engines_checked = True
-        
-        success = service.ensure_model_loaded(timeout_seconds=5)
-        
-        self.assertTrue(success)
-        self.assertTrue(service.model_loaded)
-        self.assertIsNotNone(service.model)
-        mock_whisper.load_model.assert_called_once_with("tiny")
-    
     @patch('core.transcription_service.faster_whisper')
     def test_transcribe_success_faster_whisper(self, mock_faster_whisper):
         """Test successful transcription with faster-whisper"""
@@ -251,28 +243,6 @@ class TestTranscriptionService(unittest.TestCase):
         self.assertGreater(result.duration_seconds, 0)
         self.assertEqual(result.model_info["engine"], "faster-whisper")
     
-    @patch('core.transcription_service.whisper')
-    def test_transcribe_success_openai_whisper(self, mock_whisper):
-        """Test successful transcription with openai-whisper"""
-        mock_model = Mock()
-        mock_model.transcribe.return_value = {
-            "text": "test transcription",
-            "language": "en"
-        }
-        mock_whisper.load_model.return_value = mock_model
-        
-        config = TranscriptionConfig(engine="openai")
-        service = TranscriptionService(config)
-        service._openai_whisper_available = True
-        service._engines_checked = True
-        
-        result = service.transcribe(self.temp_audio.name)
-        
-        self.assertTrue(result.success)
-        self.assertEqual(result.text, "test transcription")
-        self.assertIsNone(result.error)
-        self.assertEqual(result.model_info["engine"], "openai-whisper")
-    
     def test_transcribe_file_not_found(self):
         """Test transcription with non-existent file"""
         service = TranscriptionService(self.config)
@@ -299,26 +269,6 @@ class TestTranscriptionService(unittest.TestCase):
         self.assertIsNone(result.text)
         self.assertIsNotNone(result.error)
         self.assertEqual(result.error_type, "ModelLoadingError")
-    
-    @patch('core.transcription_service.faster_whisper')
-    def test_engine_fallback(self, mock_faster_whisper):
-        """Test fallback to available engine"""
-        mock_model = Mock()
-        mock_whisper_class = Mock(return_value=mock_model)
-        mock_faster_whisper.WhisperModel = mock_whisper_class
-        
-        # Request openai but only faster is available
-        config = TranscriptionConfig(engine="openai")
-        service = TranscriptionService(config)
-        service._faster_whisper_available = True
-        service._openai_whisper_available = False
-        service._engines_checked = True
-        
-        success = service.ensure_model_loaded(timeout_seconds=5)
-        
-        self.assertTrue(success)
-        # Should have fallen back to faster
-        self.assertEqual(service.config.engine, "faster")
     
     @patch('core.transcription_service.faster_whisper')
     def test_unload_model(self, mock_faster_whisper):

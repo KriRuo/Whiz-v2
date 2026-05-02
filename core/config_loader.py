@@ -78,7 +78,7 @@ class ServiceConfig:
             )
         
         # Validate engine
-        valid_engines = ("faster", "openai")
+        valid_engines = ("faster",)
         if self.transcription_engine not in valid_engines:
             raise ValueError(
                 f"Invalid engine: {self.transcription_engine}. "

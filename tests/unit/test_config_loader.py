@@ -38,13 +38,13 @@ class TestServiceConfig(unittest.TestCase):
         """Test creating config with custom values"""
         config = ServiceConfig(
             transcription_model_size="base",
-            transcription_engine="openai",
+            transcription_engine="faster",
             recording_sample_rate=22050,
             log_level="DEBUG"
         )
-        
+
         self.assertEqual(config.transcription_model_size, "base")
-        self.assertEqual(config.transcription_engine, "openai")
+        self.assertEqual(config.transcription_engine, "faster")
         self.assertEqual(config.recording_sample_rate, 22050)
         self.assertEqual(config.log_level, "DEBUG")
     
@@ -77,17 +77,17 @@ class TestServiceConfig(unittest.TestCase):
         """Test converting config to dictionary"""
         config = ServiceConfig(
             transcription_model_size="base",
-            transcription_engine="openai"
+            transcription_engine="faster"
         )
-        
+
         config_dict = config.to_dict()
-        
+
         self.assertIn("transcription", config_dict)
         self.assertIn("recording", config_dict)
         self.assertIn("performance", config_dict)
         self.assertIn("observability", config_dict)
         self.assertEqual(config_dict["transcription"]["model_size"], "base")
-        self.assertEqual(config_dict["transcription"]["engine"], "openai")
+        self.assertEqual(config_dict["transcription"]["engine"], "faster")
 
 
 class TestConfigLoader(unittest.TestCase):
@@ -118,14 +118,14 @@ class TestConfigLoader(unittest.TestCase):
     def test_load_from_env_transcription_settings(self):
         """Test loading transcription settings from environment"""
         os.environ["WHIZ_TRANSCRIPTION_MODEL_SIZE"] = "base"
-        os.environ["WHIZ_TRANSCRIPTION_ENGINE"] = "openai"
+        os.environ["WHIZ_TRANSCRIPTION_ENGINE"] = "faster"
         os.environ["WHIZ_TRANSCRIPTION_LANGUAGE"] = "en"
         os.environ["WHIZ_TRANSCRIPTION_TEMPERATURE"] = "0.3"
-        
+
         config_dict = ConfigLoader.load_from_env()
-        
+
         self.assertEqual(config_dict["transcription_model_size"], "base")
-        self.assertEqual(config_dict["transcription_engine"], "openai")
+        self.assertEqual(config_dict["transcription_engine"], "faster")
         self.assertEqual(config_dict["transcription_language"], "en")
         self.assertEqual(config_dict["transcription_temperature"], 0.3)
     
@@ -203,23 +203,22 @@ class TestConfigLoader(unittest.TestCase):
         """Test saving configuration to file"""
         config = ServiceConfig(
             transcription_model_size="base",
-            transcription_engine="openai"
+            transcription_engine="faster"
         )
-        
+
         with tempfile.TemporaryDirectory() as temp_dir:
             file_path = Path(temp_dir) / "config.json"
-            
+
             success = ConfigLoader.save_to_file(config, file_path)
-            
+
             self.assertTrue(success)
             self.assertTrue(file_path.exists())
-            
-            # Verify content
+
             with open(file_path, 'r') as f:
                 saved_data = json.load(f)
-            
+
             self.assertEqual(saved_data["transcription"]["model_size"], "base")
-            self.assertEqual(saved_data["transcription"]["engine"], "openai")
+            self.assertEqual(saved_data["transcription"]["engine"], "faster")
     
     def test_load_priority_order(self):
         """Test that environment variables override file config"""

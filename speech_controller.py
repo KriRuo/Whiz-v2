@@ -92,6 +92,11 @@ class SpeechController:
     
     # Backward compatibility properties
     @property
+    def audio_manager(self):
+        """Proxy to recording_service.audio_manager (used by main.py and preferences_dialog)"""
+        return self.recording_service.audio_manager
+
+    @property
     def model_size(self) -> str:
         """Get current model size"""
         return self.transcription_service.config.model_size
