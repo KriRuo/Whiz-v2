@@ -27,6 +27,7 @@ def pytest_configure(config):
         print(f"[PYTEST] FFmpeg not found at: {ffmpeg_bin}")
         print("[PYTEST] E2E tests requiring FFmpeg will be skipped")
 
+
 def pytest_collection_modifyitems(config, items):
     """
     Modify test collection to add markers.
@@ -45,4 +46,30 @@ def pytest_collection_modifyitems(config, items):
         # Add unit marker to non-integration tests
         if "Integration" not in item.nodeid and "e2e" not in item.keywords:
             item.add_marker(pytest.mark.unit)
+
+
+def pytest_runtest_setup(item):
+    """
+    Reset test isolation state before each test.
+    This ensures tests don't interfere with each other.
+    """
+    # Reset the global cleanup manager before each test to allow re-registration
+    try:
+        from core.cleanup_manager import reset_cleanup_manager
+        reset_cleanup_manager()
+    except (ImportError, Exception):
+        pass  # Not available in all test contexts
+
+
+def pytest_runtest_teardown(item, nextitem):
+    """
+    Clean up after each test run.
+    """
+    # Reset cleanup manager after test completion too
+    try:
+        from core.cleanup_manager import reset_cleanup_manager
+        reset_cleanup_manager()
+    except (ImportError, Exception):
+        pass  # Not available in all test contexts
+
 

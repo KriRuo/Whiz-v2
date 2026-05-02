@@ -9,6 +9,7 @@ import tempfile
 import os
 import threading
 import time
+import types
 import numpy as np
 from unittest.mock import Mock, patch, MagicMock
 from PyQt5.QtWidgets import QApplication
@@ -16,6 +17,17 @@ from pathlib import Path
 
 import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+# Provide lightweight module stubs when optional ML packages are unavailable.
+if 'faster_whisper' not in sys.modules:
+    faster_whisper_stub = types.ModuleType('faster_whisper')
+    faster_whisper_stub.WhisperModel = Mock
+    sys.modules['faster_whisper'] = faster_whisper_stub
+
+if 'whisper' not in sys.modules:
+    whisper_stub = types.ModuleType('whisper')
+    whisper_stub.load_model = Mock(return_value=Mock())
+    sys.modules['whisper'] = whisper_stub
 
 from speech_controller import SpeechController
 from core.path_validation import get_sandbox
@@ -49,37 +61,52 @@ class TestSpeechController(unittest.TestCase):
         if not sandbox.temp_dir.exists():
             sandbox.temp_dir.mkdir(parents=True, exist_ok=True)
         
-        # Mock sounddevice to avoid hardware dependencies
-        with patch('core.audio_manager.sd') as mock_sounddevice:
-            mock_sounddevice.query_devices.return_value = [
-                {'name': 'Test Microphone', 'max_input_channels': 1, 'default_samplerate': 44100}
-            ]
-            # sd.default.device is a tuple (input_device, output_device)
-            mock_default = Mock()
-            mock_default.device = [0, 0]  # (input, output)
-            mock_sounddevice.default = mock_default
-            mock_sounddevice.rec.return_value = np.array([[0.1, 0.2, 0.3]])
-            
-            # Mock pynput to avoid system dependencies
-            with patch('core.hotkey_manager.keyboard') as mock_pynput:
-                mock_listener = Mock()
-                mock_pynput.Listener.return_value = mock_listener
-                
-                # Mock faster_whisper to avoid downloading models
-                with patch('faster_whisper.WhisperModel') as mock_whisper_class:
-                    mock_model = create_mock_faster_whisper_model()
-                    mock_whisper_class.return_value = mock_model
-                    
-                    self.controller = SpeechController(
-                        hotkey="alt gr",
-                        model_size="tiny",
-                        auto_paste=True,
-                        language=None,
-                        temperature=0.0
-                    )
+        # Patch all external dependencies at module level for the test
+        self.mock_sounddevice = patch('core.audio_manager.sd')
+        self.mock_pynput = patch('core.hotkey_manager.keyboard')
+        self.mock_transcription_service = patch('speech_controller.TranscriptionService')
+        self.mock_faster_whisper = patch('faster_whisper.WhisperModel')
+        
+        self.mock_sd = self.mock_sounddevice.start()
+        self.mock_keyboard = self.mock_pynput.start()
+        self.mock_service_class = self.mock_transcription_service.start()
+        self.mock_whisper = self.mock_faster_whisper.start()
+        
+        # Configure sounddevice mock
+        self.mock_sd.query_devices.return_value = [
+            {'name': 'Test Microphone', 'max_input_channels': 1, 'default_samplerate': 44100}
+        ]
+        mock_default = Mock()
+        mock_default.device = [0, 0]
+        self.mock_sd.default = mock_default
+        self.mock_sd.rec.return_value = np.array([[0.1, 0.2, 0.3]])
+        
+        # Configure pynput mock
+        mock_listener = Mock()
+        self.mock_keyboard.Listener.return_value = mock_listener
+        
+        # Configure faster_whisper mock (only used for openai/fallback path)
+        mock_model = create_mock_faster_whisper_model()
+        self.mock_whisper.return_value = mock_model
+        
+        # Create the controller with mocked dependencies
+        self.controller = SpeechController(
+            hotkey="alt gr",
+            model_size="tiny",
+            auto_paste=True,
+            language=None,
+            temperature=0.0
+        )
     
     def tearDown(self):
         """Clean up after tests"""
+        # Stop all patches
+        self.mock_sounddevice.stop()
+        self.mock_pynput.stop()
+        self.mock_transcription_service.stop()
+        self.mock_faster_whisper.stop()
+        
+        # Clean up controller resources
         if hasattr(self, 'controller'):
             # Clean up any temporary files
             if hasattr(self.controller, 'temp_dir') and os.path.exists(self.controller.temp_dir):
@@ -158,9 +185,11 @@ class TestSpeechController(unittest.TestCase):
     
     def test_ensure_model_loaded_success(self):
         """Test successful model loading"""
-        with patch('faster_whisper.WhisperModel') as mock_whisper_class:
-            mock_model = create_mock_faster_whisper_model()
-            mock_whisper_class.return_value = mock_model
+        # For the faster engine path, mock TranscriptionService
+        with patch('speech_controller.TranscriptionService') as mock_service_class:
+            mock_service = Mock()
+            mock_service.start.return_value = True
+            mock_service_class.return_value = mock_service
             
             result = self.controller._ensure_model_loaded()
             
@@ -168,14 +197,20 @@ class TestSpeechController(unittest.TestCase):
             self.assertTrue(self.controller.model_loaded)
             self.assertFalse(self.controller.model_loading)
             self.assertIsNone(self.controller.model_load_error)
-            self.assertEqual(self.controller.model, mock_model)
+            # For faster engine, model is the service not the actual model object
+            self.assertEqual(self.controller.transcription_service, mock_service)
     
     def test_ensure_model_loaded_failure(self):
         """Test model loading failure with fallback"""
-        # Patch both faster_whisper and openai-whisper to fail
-        with patch('faster_whisper.WhisperModel') as mock_faster_whisper:
+        # Mock TranscriptionService to fail, then openai-whisper as fallback
+        with patch('speech_controller.TranscriptionService') as mock_service_class:
             with patch('whisper.load_model') as mock_openai_whisper:
-                mock_faster_whisper.side_effect = Exception("Model load failed")
+                # TranscriptionService.start() fails
+                mock_service = Mock()
+                mock_service.start.return_value = False
+                mock_service_class.return_value = mock_service
+                
+                # Fallback whisper also fails
                 mock_openai_whisper.side_effect = Exception("Fallback also failed")
                 
                 result = self.controller._ensure_model_loaded()
@@ -303,6 +338,46 @@ class TestSpeechController(unittest.TestCase):
         self.assertTrue(self.controller.audio_path.startswith(self.controller.temp_dir))
         self.assertTrue(self.controller.audio_path.endswith('.wav'))
         self.assertTrue('whiz_' in os.path.basename(self.controller.audio_path))
+
+    def test_process_recorded_audio_uses_transcription_service_for_faster_engine(self):
+        """Test faster engine path uses process-based transcription service."""
+        self.controller.engine = "faster"
+        self.controller.model_loaded = True
+        self.controller.transcription_service = Mock()
+        self.controller.transcription_service.transcribe.return_value = {
+            "text": "service transcript",
+            "metadata": {"engine": "faster"}
+        }
+
+        # Prepare a valid audio file because process_recorded_audio validates existence/size
+        with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as temp_audio:
+            temp_audio.write(b"0" * 2048)
+            audio_path = temp_audio.name
+
+        self.controller.audio_path = audio_path
+        self.controller.recording_frames = [b"dummy-audio-frame"]
+        self.controller.save_audio_to_file = Mock(return_value=True)
+
+        try:
+            self.controller.process_recorded_audio()
+            self.controller.transcription_service.transcribe.assert_called_once()
+            self.assertGreater(len(self.controller.transcript_log), 0)
+            self.assertEqual(self.controller.transcript_log[0]["text"], "service transcript")
+        finally:
+            if os.path.exists(audio_path):
+                os.unlink(audio_path)
+
+    def test_cleanup_model_stops_transcription_service(self):
+        """Test model cleanup also stops transcription worker service."""
+        mock_service = Mock()
+        self.controller.transcription_service = mock_service
+
+        success = self.controller._cleanup_model()
+
+        self.assertTrue(success)
+        mock_service.stop.assert_called_once()
+        self.assertIsNone(self.controller.transcription_service)
+        self.assertTrue(self.controller._verify_model_cleanup())
 
 
 class TestSpeechControllerIntegration(unittest.TestCase):

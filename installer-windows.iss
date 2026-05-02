@@ -58,7 +58,6 @@ Source: "assets\*"; DestDir: "{app}\assets"; Flags: ignoreversion recursesubdirs
 
 ; Documentation
 Source: "README.md"; DestDir: "{app}"; Flags: ignoreversion
-Source: "QUICK_START.md"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 ; Start Menu

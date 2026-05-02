@@ -57,6 +57,8 @@ This guide covers how to package and distribute Whiz Voice-to-Text Application a
 
 ### Prerequisites
 
+> **Release baseline (Windows):** Build distributable artifacts with **Python 3.11** (the validated runtime environment).
+
 1. **Install PyInstaller**:
    ```bash
    pip install pyinstaller
@@ -88,7 +90,7 @@ This script will:
 
 1. **Windows**:
    ```cmd
-   pyinstaller whiz.spec
+  whiz_env_311\Scripts\python.exe -m PyInstaller whiz.spec --clean --noconfirm
    ```
 
 2. **macOS**:
@@ -111,7 +113,7 @@ The `whiz.spec` file contains PyInstaller configuration:
 block_cipher = None
 
 a = Analysis(
-    ['main.py'],
+  ['main_with_splash.py'],
     pathex=[],
     binaries=[],
     datas=[
@@ -126,6 +128,8 @@ a = Analysis(
         'sounddevice',
         'pynput',
         'whisper',
+      'faster_whisper',
+      'torch',
         'pyautogui',
     ],
     hookspath=[],
