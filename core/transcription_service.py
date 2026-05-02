@@ -320,7 +320,10 @@ class TranscriptionService:
 
         try:
             logger.info(f"Loading faster-whisper model: {model_name} on {device} ({compute_type})")
-            self.model = faster_whisper.WhisperModel(model_name, device=device, compute_type=compute_type)
+            # cpu_threads=1 prevents OpenMP/ctranslate2 thread pool from conflicting with Qt
+            self.model = faster_whisper.WhisperModel(
+                model_name, device=device, compute_type=compute_type, cpu_threads=1
+            )
             self._active_device = device
             self._active_compute_type = compute_type
             logger.info("faster-whisper model loaded successfully")
@@ -329,7 +332,9 @@ class TranscriptionService:
             if device == "cuda":
                 logger.warning(f"CUDA model load failed ({e}), falling back to cpu+int8")
                 try:
-                    self.model = faster_whisper.WhisperModel(model_name, device="cpu", compute_type="int8")
+                    self.model = faster_whisper.WhisperModel(
+                        model_name, device="cpu", compute_type="int8", cpu_threads=1
+                    )
                     self._active_device = "cpu"
                     self._active_compute_type = "int8"
                     logger.info("faster-whisper model loaded on CPU (fallback)")
