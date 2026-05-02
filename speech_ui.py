@@ -88,9 +88,9 @@ class SpeechApp(MainWindow):
         # DISABLED: This was overriding our responsive window sizing
         # QTimer.singleShot(100, self.adjustSize)
         
-        # Load model after UI is ready (on main thread with Qt event processing)
-        # This prevents PyQt/ONNX crashes while allowing UI to remain responsive
-        QTimer.singleShot(500, self.start_background_model_loading)
+        # Model loading already started eagerly in SpeechController.__init__.
+        # Trigger UI status update so the footer reflects the loading state immediately.
+        QTimer.singleShot(0, self.start_background_model_loading)
         
         # Mark initialization as complete after a short delay
         QTimer.singleShot(1000, self._mark_initialization_complete)
