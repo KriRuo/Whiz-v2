@@ -27,6 +27,7 @@ Also audit the record tab for any other padding, spacing, or widget-sizing issue
 
 ### Acceptance criteria
 
+- [ ] Launching Whiz via any provided script (`.bat`, `.vbs`, shortcut) never opens a terminal/console window.
 - [ ] Only one button is visible at a time in the Record tab — no overlap at any window size.
 - [ ] Button reads "Start Recording" when idle/model-loading; reads "Stop Recording" when actively recording.
 - [ ] Button is disabled (greyed out) while the model is loading — not hidden, so the user sees something to wait for.
