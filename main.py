@@ -175,28 +175,17 @@ def main():
         try:
             import ctypes
             hwnd = int(window.winId())
-                
-                # Load the icon
-                user32 = ctypes.windll.user32
-                icon_path_obj = PlatformUtils.get_resource_path("assets/images/icons/app_icon_transparent.ico")
-                abs_icon_path = str(icon_path_obj)
-                
-                hicon = user32.LoadImageW(
-                    None, abs_icon_path, 1, 0, 0, 0x00000010
-                )
-                
-                if hicon:
-                    # Set both small and large icons
-                    WM_SETICON = 0x0080
-                    ICON_SMALL = 0
-                    ICON_BIG = 1
-                    
-                    user32.SendMessageW(hwnd, WM_SETICON, ICON_SMALL, hicon)
-                    user32.SendMessageW(hwnd, WM_SETICON, ICON_BIG, hicon)
-                    
-                    logger.info("Windows taskbar icon set successfully")
-            except Exception as e:
-                logger.warning(f"Could not set Windows taskbar icon: {e}")
+            user32 = ctypes.windll.user32
+            icon_path_obj = PlatformUtils.get_resource_path("assets/images/icons/app_icon_transparent.ico")
+            abs_icon_path = str(icon_path_obj)
+            hicon = user32.LoadImageW(None, abs_icon_path, 1, 0, 0, 0x00000010)
+            if hicon:
+                WM_SETICON = 0x0080
+                user32.SendMessageW(hwnd, WM_SETICON, 0, hicon)
+                user32.SendMessageW(hwnd, WM_SETICON, 1, hicon)
+                logger.info("Windows taskbar icon set successfully")
+        except Exception as e:
+            logger.warning(f"Could not set Windows taskbar icon: {e}")
         
         logger.info("Application started successfully!")
         logger.info("Press AltGr (or your configured hotkey) to start recording.")
