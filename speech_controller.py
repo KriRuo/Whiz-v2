@@ -324,6 +324,7 @@ class SpeechController:
         success = self.recording_service.start_recording()
         if success:
             logger.info("Audio recording started successfully")
+            self._update_status("Recording...")
         else:
             logger.error("Failed to start audio recording")
             self._update_status("Recording failed")

@@ -335,15 +335,17 @@ class RecordingService:
             self._set_state(RecordingState.STOPPING)
             self._update_status("Stopping recording...")
             
-            # Stop audio recording and get file path
-            audio_path = self.audio_manager.stop_recording(self.current_audio_path)
-            
+            # Stop audio recording and get raw frames, then save to file
+            frames = self.audio_manager.stop_recording()
+            audio_path = self.current_audio_path
+            saved = self.audio_manager.save_audio_to_file(frames, audio_path) if frames else False
+
             # Calculate duration
             duration = 0.0
             if self.recording_start_time:
                 duration = time.time() - self.recording_start_time
-            
-            if audio_path and Path(audio_path).exists():
+
+            if saved and Path(audio_path).exists():
                 self._set_state(RecordingState.IDLE)
                 self._update_status("Recording complete")
                 
