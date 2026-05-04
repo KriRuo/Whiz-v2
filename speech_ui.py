@@ -333,14 +333,12 @@ class SpeechApp(MainWindow):
         else:  # Idle or any other status
             self.waveform_widget.set_state("idle")
 
-        # Mirror state on tray icon
+        # Mirror state on tray icon — only show recording indicator during active recording
         if hasattr(self, 'system_tray') and self.system_tray:
             if status == "Recording...":
                 self.system_tray.set_state("recording")
-            elif "loading" in status.lower():
-                self.system_tray.set_state("loading")
             else:
-                self.system_tray.set_state("ready")
+                self.system_tray.set_state("idle")
         
         # Update button states based on status
         if status == "Recording...":

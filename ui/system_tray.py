@@ -143,27 +143,26 @@ class SystemTrayIcon(QSystemTrayIcon):
             self.showMessage(title, message, icon, timeout)
     
     def set_state(self, state: str):
-        """Update tray icon colour to reflect application state.
+        """Update tray icon to reflect recording state.
 
-        state: 'loading' (grey) | 'ready' (green) | 'recording' (red)
+        state: 'recording' shows a red dot; anything else restores the app icon.
         """
-        colors = {"loading": "#888888", "ready": "#44cc44", "recording": "#cc4444"}
-        tips = {
-            "loading": "Whiz — loading model...",
-            "ready": "Whiz — ready",
-            "recording": "Whiz — recording",
-        }
-        color = colors.get(state, "#888888")
-        pixmap = QPixmap(16, 16)
-        pixmap.fill(Qt.transparent)
-        painter = QPainter(pixmap)
-        painter.setRenderHint(QPainter.Antialiasing)
-        painter.setBrush(QColor(color))
-        painter.setPen(Qt.NoPen)
-        painter.drawEllipse(2, 2, 12, 12)
-        painter.end()
-        self.setIcon(QIcon(pixmap))
-        self.setToolTip(tips.get(state, "Whiz Voice-to-Text"))
+        if state == "recording":
+            pixmap = QPixmap(16, 16)
+            pixmap.fill(Qt.transparent)
+            painter = QPainter(pixmap)
+            painter.setRenderHint(QPainter.Antialiasing)
+            painter.setBrush(QColor("#cc4444"))
+            painter.setPen(Qt.NoPen)
+            painter.drawEllipse(2, 2, 12, 12)
+            painter.end()
+            self.setIcon(QIcon(pixmap))
+            self.setToolTip("Whiz — recording")
+        else:
+            icon_path = str(PlatformUtils.get_resource_path("assets/images/icons/app_icon_transparent.ico"))
+            if os.path.exists(icon_path):
+                self.setIcon(QIcon(icon_path))
+            self.setToolTip("Whiz Voice-to-Text")
 
     def cleanup(self):
         """Clean up the tray icon."""

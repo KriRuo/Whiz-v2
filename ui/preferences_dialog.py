@@ -451,13 +451,12 @@ class PreferencesDialog(BaseDialog):
         recording_section.layout().addRow(self.auto_paste_checkbox)
         
         # Toggle mode setting
-        self.toggle_mode_checkbox = QCheckBox("Toggle Mode (press once to start/stop)")
+        self.toggle_mode_checkbox = QCheckBox("Press-to-toggle mode")
         recording_section.layout().addRow(self.toggle_mode_checkbox)
-        
-        # Toggle mode info
+
         toggle_info = InfoLabel(
-            "• Hold Mode: Hold the hotkey while speaking, release to transcribe\n"
-            "• Toggle Mode: Press once to start recording, press again to stop"
+            "• Unchecked (default): Hold the hotkey to record — release to stop\n"
+            "• Checked: Press once to start, press again to stop"
         )
         recording_section.layout().addRow(toggle_info)
         

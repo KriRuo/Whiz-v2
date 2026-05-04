@@ -164,6 +164,9 @@ def main():
             engine=settings.get("whisper/engine", "faster")
         )
         
+        # Apply settings not covered by the constructor
+        controller.set_toggle_mode(settings.get("behavior/toggle_mode", False))
+
         # Check if controller initialized successfully
         if not controller.audio_manager.is_available():
             logger.warning("Audio system not available - running in limited mode")
