@@ -236,17 +236,14 @@ class SpeechApp(MainWindow):
     
     def start_background_model_loading(self):
         """Start loading the Whisper model in the background"""
-        # Check if controller is lazy-loaded and needs initialization first
         if hasattr(self.controller, '_ensure_initialized'):
-            # This is a LazySpeechController, ensure it's initialized
             if not self.controller._ensure_initialized():
                 logger.warning("Failed to initialize controller for model loading")
                 return
-        
+
         if self.controller.preload_model():
             logger.info("Started background model loading...")
-            # Update status to show loading
-            self.update_status("Idle")  # This will show "Model: Loading..."
+            self.update_status("Idle")
         else:
             logger.info("Model already loaded or loading")
         
@@ -335,6 +332,15 @@ class SpeechApp(MainWindow):
             self.waveform_widget.set_state("transcribing")
         else:  # Idle or any other status
             self.waveform_widget.set_state("idle")
+
+        # Mirror state on tray icon
+        if hasattr(self, 'system_tray') and self.system_tray:
+            if status == "Recording...":
+                self.system_tray.set_state("recording")
+            elif "loading" in status.lower():
+                self.system_tray.set_state("loading")
+            else:
+                self.system_tray.set_state("ready")
         
         # Update button states based on status
         if status == "Recording...":

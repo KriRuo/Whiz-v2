@@ -6,8 +6,8 @@ Provides cross-platform system tray functionality with context menu and window c
 import os
 import sys
 from PyQt5.QtWidgets import QSystemTrayIcon, QMenu, QAction, QMessageBox
-from PyQt5.QtCore import pyqtSignal, QTimer
-from PyQt5.QtGui import QIcon, QPixmap
+from PyQt5.QtCore import pyqtSignal, QTimer, Qt
+from PyQt5.QtGui import QIcon, QPixmap, QPainter, QColor
 
 from core.platform_utils import PlatformUtils
 
@@ -142,6 +142,29 @@ class SystemTrayIcon(QSystemTrayIcon):
         if QSystemTrayIcon.isSystemTrayAvailable():
             self.showMessage(title, message, icon, timeout)
     
+    def set_state(self, state: str):
+        """Update tray icon colour to reflect application state.
+
+        state: 'loading' (grey) | 'ready' (green) | 'recording' (red)
+        """
+        colors = {"loading": "#888888", "ready": "#44cc44", "recording": "#cc4444"}
+        tips = {
+            "loading": "Whiz — loading model...",
+            "ready": "Whiz — ready",
+            "recording": "Whiz — recording",
+        }
+        color = colors.get(state, "#888888")
+        pixmap = QPixmap(16, 16)
+        pixmap.fill(Qt.transparent)
+        painter = QPainter(pixmap)
+        painter.setRenderHint(QPainter.Antialiasing)
+        painter.setBrush(QColor(color))
+        painter.setPen(Qt.NoPen)
+        painter.drawEllipse(2, 2, 12, 12)
+        painter.end()
+        self.setIcon(QIcon(pixmap))
+        self.setToolTip(tips.get(state, "Whiz Voice-to-Text"))
+
     def cleanup(self):
         """Clean up the tray icon."""
         if QSystemTrayIcon.isSystemTrayAvailable():

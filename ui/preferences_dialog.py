@@ -467,7 +467,19 @@ class PreferencesDialog(BaseDialog):
             "You can restore the window by clicking the tray icon or using the tray menu."
         )
         recording_section.layout().addRow(tray_info)
-        
+
+        # Start with Windows (Windows-only)
+        import sys as _sys
+        if _sys.platform == "win32":
+            self.run_at_startup_checkbox = QCheckBox("Start with Windows")
+            recording_section.layout().addRow(self.run_at_startup_checkbox)
+            startup_info = InfoLabel(
+                "Launches Whiz minimized to the system tray when you log in to Windows."
+            )
+            recording_section.layout().addRow(startup_info)
+        else:
+            self.run_at_startup_checkbox = None
+
         layout.addWidget(recording_section)
         
         # Visual Indicator Section
@@ -752,6 +764,9 @@ class PreferencesDialog(BaseDialog):
             self.auto_paste_checkbox.setChecked(self.current_settings.get("behavior/auto_paste", True))
             self.toggle_mode_checkbox.setChecked(self.current_settings.get("behavior/toggle_mode", False))
             self.minimize_to_tray_checkbox.setChecked(self.current_settings.get("behavior/minimize_to_tray", False))
+            if self.run_at_startup_checkbox is not None:
+                from core.windows_startup import WindowsStartupManager
+                self.run_at_startup_checkbox.setChecked(WindowsStartupManager().is_enabled())
             self.visual_indicator_checkbox.setChecked(self.current_settings.get("behavior/visual_indicator", True))
             self.indicator_position_combo.setCurrentText(self.current_settings.get("behavior/indicator_position", "Bottom Center"))
             self.indicator_position_combo.setEnabled(self.visual_indicator_checkbox.isChecked())
@@ -802,6 +817,8 @@ class PreferencesDialog(BaseDialog):
             self.auto_paste_checkbox.stateChanged.disconnect()
             self.toggle_mode_checkbox.stateChanged.disconnect()
             self.minimize_to_tray_checkbox.stateChanged.disconnect()
+            if self.run_at_startup_checkbox is not None:
+                self.run_at_startup_checkbox.stateChanged.disconnect()
             self.visual_indicator_checkbox.stateChanged.disconnect()
             self.sound_effects_checkbox.stateChanged.disconnect()
             self.speed_mode_checkbox.stateChanged.disconnect()
@@ -831,6 +848,8 @@ class PreferencesDialog(BaseDialog):
         self.auto_paste_checkbox.stateChanged.connect(self.on_setting_changed)
         self.toggle_mode_checkbox.stateChanged.connect(self.on_setting_changed)
         self.minimize_to_tray_checkbox.stateChanged.connect(self.on_setting_changed)
+        if self.run_at_startup_checkbox is not None:
+            self.run_at_startup_checkbox.stateChanged.connect(self.on_startup_changed)
         self.visual_indicator_checkbox.stateChanged.connect(self.on_visual_indicator_changed)
         self.sound_effects_checkbox.stateChanged.connect(self.on_setting_changed)
         self.speed_mode_checkbox.stateChanged.connect(self.on_setting_changed)
@@ -948,6 +967,19 @@ class PreferencesDialog(BaseDialog):
             self.temperature_label.setText("0.0")
             self.settings_manager.set("whisper/temperature", 0.0)
     
+    def on_startup_changed(self):
+        """Handle Start with Windows checkbox changes."""
+        import sys
+        from pathlib import Path
+        from core.windows_startup import WindowsStartupManager
+        mgr = WindowsStartupManager()
+        if self.run_at_startup_checkbox.isChecked():
+            exe = f'"{sys.executable}" "{Path(sys.argv[0]).resolve()}"'
+            mgr.enable(exe)
+        else:
+            mgr.disable()
+        self.settings_manager.set("behavior/run_at_startup", self.run_at_startup_checkbox.isChecked())
+
     def on_visual_indicator_changed(self):
         """Handle visual indicator checkbox changes."""
         enabled = self.visual_indicator_checkbox.isChecked()

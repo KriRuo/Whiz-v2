@@ -4,9 +4,19 @@ Speech-to-Text Tool with PyQt GUI
 A hotkey-based voice-to-text application using Whisper and sounddevice.
 """
 
+import os
+# Must be set before ctranslate2/torch are imported — their OpenMP runtimes read
+# these at initialisation time, and changing them afterwards has no effect.
+os.environ.setdefault("OMP_NUM_THREADS", "1")
+os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
+
+# ctranslate2 must be imported before any Qt module.  Both ship OpenMP/compiler
+# runtime DLLs on Windows; whichever loads first claims the shared allocator.
+# If Qt loads first, ctranslate2's WhisperModel() segfaults at model-load time.
+import ctranslate2  # noqa: F401 — import side-effect only
+
 import sys
 import traceback
-import os
 from pathlib import Path
 from PyQt5.QtWidgets import QApplication, QMessageBox
 from PyQt5.QtCore import Qt
@@ -171,34 +181,28 @@ def main():
         try:
             import ctypes
             hwnd = int(window.winId())
-                
-                # Load the icon
-                user32 = ctypes.windll.user32
-                icon_path_obj = PlatformUtils.get_resource_path("assets/images/icons/app_icon_transparent.ico")
-                abs_icon_path = str(icon_path_obj)
-                
-                hicon = user32.LoadImageW(
-                    None, abs_icon_path, 1, 0, 0, 0x00000010
-                )
-                
-                if hicon:
-                    # Set both small and large icons
-                    WM_SETICON = 0x0080
-                    ICON_SMALL = 0
-                    ICON_BIG = 1
-                    
-                    user32.SendMessageW(hwnd, WM_SETICON, ICON_SMALL, hicon)
-                    user32.SendMessageW(hwnd, WM_SETICON, ICON_BIG, hicon)
-                    
-                    logger.info("Windows taskbar icon set successfully")
-            except Exception as e:
-                logger.warning(f"Could not set Windows taskbar icon: {e}")
+            user32 = ctypes.windll.user32
+            icon_path_obj = PlatformUtils.get_resource_path("assets/images/icons/app_icon_transparent.ico")
+            abs_icon_path = str(icon_path_obj)
+            hicon = user32.LoadImageW(None, abs_icon_path, 1, 0, 0, 0x00000010)
+            if hicon:
+                WM_SETICON = 0x0080
+                user32.SendMessageW(hwnd, WM_SETICON, 0, hicon)
+                user32.SendMessageW(hwnd, WM_SETICON, 1, hicon)
+                logger.info("Windows taskbar icon set successfully")
+        except Exception as e:
+            logger.warning(f"Could not set Windows taskbar icon: {e}")
         
         logger.info("Application started successfully!")
         logger.info("Press AltGr (or your configured hotkey) to start recording.")
         logger.info("Hold Mode: Hold the key down while speaking, release to transcribe.")
         logger.info("Toggle Mode: Press once to start, press again to stop.")
-        
+
+        # Load Whisper model synchronously on the main thread before entering the event loop.
+        # Background thread loading (threading.Thread or QThread) both segfault because
+        # ctranslate2's OpenMP thread pool initialisation conflicts with Qt's QThreadPool
+        # workers, which become active as soon as the event loop starts.  Loading here
+        # avoids that window — the model is ready before app.exec_() fires the workers.
         # Start the event loop
         result = app.exec_()
         
