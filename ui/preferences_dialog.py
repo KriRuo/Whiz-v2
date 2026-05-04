@@ -8,12 +8,11 @@ from typing import Optional, Dict, Any
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QTabWidget, QWidget, QFormLayout,
     QComboBox, QCheckBox, QLineEdit, QPushButton, QLabel, QSlider, QSpinBox,
-    QGroupBox, QFileDialog, QMessageBox, QScrollArea, QFrame, QSizePolicy,
+    QGroupBox, QMessageBox, QScrollArea, QFrame, QSizePolicy,
     QApplication, QDesktopWidget, QProgressBar
 )
-from PyQt5.QtCore import Qt, pyqtSignal, QUrl, QTimer
+from PyQt5.QtCore import Qt, pyqtSignal, QTimer
 from PyQt5.QtGui import QFont, QPixmap, QCursor
-from PyQt5.QtMultimedia import QSoundEffect
 
 from core.settings_manager import SettingsManager
 from core.settings_schema import SETTINGS_SCHEMA
@@ -70,7 +69,6 @@ class PreferencesDialog(BaseDialog):
         self.create_general_tab()
         self.create_behavior_tab()
         self.create_audio_tab()
-        self.create_transcription_tab()
         self.create_advanced_tab()
         
         # Create button layout using layout system
@@ -393,44 +391,50 @@ class PreferencesDialog(BaseDialog):
         """Create the General tab using unified components."""
         tab = QWidget()
         layout = self.create_tab_layout(tab)
-        
-        # UI Settings Section
-        ui_section = SettingsSection("User Interface", layout_type="form")
-        
-        # Theme selection
-        self.theme_combo = self.create_styled_combobox(["system", "light", "dark"])
-        ui_section.layout().addRow("Theme:", self.theme_combo)
-        
-        # Theme info
-        theme_info = InfoLabel(
-            "• system: Follow your system's dark/light mode setting\n"
-            "• light: Always use light theme\n"
-            "• dark: Always use dark theme"
-        )
-        ui_section.layout().addRow(theme_info)
-        
-        layout.addWidget(ui_section)
-        
+
         # Language Settings Section
         language_section = SettingsSection("Language Settings", layout_type="form")
-        
-        # Language selection
+
         self.language_combo = self.create_styled_combobox([
-            "auto", "en", "de", "es", "fr", "it", "pt", "ru", "ja", "ko", "zh", 
+            "auto", "en", "de", "es", "fr", "it", "pt", "ru", "ja", "ko", "zh",
             "sv", "fi", "no", "da", "nl", "pl", "tr", "ar", "hi"
         ])
         language_section.layout().addRow("Language:", self.language_combo)
-        
-        # Language info
+
         language_info = InfoLabel(
             "• auto: Automatically detect language from speech\n"
             "• Specific languages: Force transcription in that language\n"
             "• Using a specific language can improve accuracy"
         )
         language_section.layout().addRow(language_info)
-        
+
         layout.addWidget(language_section)
-        
+
+        # Whisper Model Section
+        model_section = SettingsSection("Whisper Model", layout_type="form")
+
+        self.model_combo = self.create_styled_combobox(["tiny", "base", "small", "medium", "large"])
+        model_section.layout().addRow("Model:", self.model_combo)
+
+        # Dynamic label: shows cache status + size when a model is selected
+        self.model_download_label = InfoLabel("")
+        self.model_download_label.setVisible(False)
+        model_section.layout().addRow(self.model_download_label)
+
+        model_info = InfoLabel(
+            "• tiny: Fastest, least accurate (~39 MB)\n"
+            "• base: Fast, good accuracy (~74 MB) — recommended\n"
+            "• small: Balanced speed/accuracy (~244 MB)\n"
+            "• medium: Slower, better accuracy (~769 MB)\n"
+            "• large: Slowest, most accurate (~1550 MB)"
+        )
+        model_section.layout().addRow(model_info)
+
+        self.speed_mode_checkbox = QCheckBox("Enable speed optimizations")
+        model_section.layout().addRow(self.speed_mode_checkbox)
+
+        layout.addWidget(model_section)
+
         layout.addStretch()
         self.tab_widget.addTab(tab, "General")
     
@@ -574,85 +578,9 @@ class PreferencesDialog(BaseDialog):
         device_section.layout().addRow(self.no_device_warning)
         
         layout.addWidget(device_section)
-        
-        # Tone Files Section
-        tones_section = SettingsSection("Tone Files", layout_type="form")
-        
-        # Start tone
-        start_tone_layout = self.create_horizontal_layout()
-        self.start_tone_edit = QLineEdit()
-        start_tone_browse = QPushButton("Browse...")
-        start_tone_browse.clicked.connect(lambda: self.browse_tone_file("start"))
-        start_tone_test = QPushButton("Test")
-        start_tone_test.clicked.connect(lambda: self.test_tone("start"))
-        start_tone_layout.addWidget(self.start_tone_edit)
-        start_tone_layout.addWidget(start_tone_browse)
-        start_tone_layout.addWidget(start_tone_test)
-        tones_section.layout().addRow("Start Tone:", start_tone_layout)
-        
-        # Stop tone
-        stop_tone_layout = self.create_horizontal_layout()
-        self.stop_tone_edit = QLineEdit()
-        stop_tone_browse = QPushButton("Browse...")
-        stop_tone_browse.clicked.connect(lambda: self.browse_tone_file("stop"))
-        stop_tone_test = QPushButton("Test")
-        stop_tone_test.clicked.connect(lambda: self.test_tone("stop"))
-        stop_tone_layout.addWidget(self.stop_tone_edit)
-        stop_tone_layout.addWidget(stop_tone_browse)
-        stop_tone_layout.addWidget(stop_tone_test)
-        tones_section.layout().addRow("Stop Tone:", stop_tone_layout)
-        
-        layout.addWidget(tones_section)
-        
+
         layout.addStretch()
         self.tab_widget.addTab(tab, "Audio")
-    
-    def create_transcription_tab(self):
-        """Create the Transcription tab using unified components."""
-        tab = QWidget()
-        layout = self.create_tab_layout(tab)
-        
-        # Whisper Settings Section
-        whisper_section = SettingsSection("Whisper Model Settings", layout_type="form")
-        
-        # Model selection
-        self.model_combo = self.create_styled_combobox(["tiny", "base", "small", "medium", "large"])
-        whisper_section.layout().addRow("Model Size:", self.model_combo)
-        
-        # Model info
-        model_info = InfoLabel(
-            "• tiny: Fastest, least accurate (~39 MB)\n"
-            "• base: Fast, good accuracy (~74 MB)\n"
-            "• small: Balanced speed/accuracy (~244 MB)\n"
-            "• medium: Slower, better accuracy (~769 MB)\n"
-            "• large: Slowest, most accurate (~1550 MB)"
-        )
-        whisper_section.layout().addRow(model_info)
-        
-        # Speed mode
-        self.speed_mode_checkbox = QCheckBox("Enable speed optimizations")
-        whisper_section.layout().addRow(self.speed_mode_checkbox)
-        
-        layout.addWidget(whisper_section)
-        
-        # Performance Settings Section (vertical layout)
-        perf_section = SettingsSection("Performance Settings", layout_type="vertical")
-        
-        # Performance info
-        perf_info = InfoLabel(
-            "For best performance:\n"
-            "• Use 'tiny' or 'base' models for real-time transcription\n"
-            "• Set temperature to 0.0 for fastest results\n"
-            "• Enable speed optimizations\n"
-            "• Close other applications to free up memory"
-        )
-        perf_section.layout().addWidget(perf_info)
-        
-        layout.addWidget(perf_section)
-        
-        layout.addStretch()
-        self.tab_widget.addTab(tab, "Transcription")
-    
     
     def create_advanced_tab(self):
         """Create the Advanced tab using unified components."""
@@ -749,12 +677,7 @@ class PreferencesDialog(BaseDialog):
             # Use cached settings for better performance (no validation overhead)
             self.current_settings = self.settings_manager.load_all()
             
-            # General settings - use setCurrentIndex with findText for reliability
-            theme_value = self.current_settings.get("ui/theme", "system")
-            theme_index = self.theme_combo.findText(theme_value)
-            if theme_index >= 0:
-                self.theme_combo.setCurrentIndex(theme_index)
-            
+            # General settings
             language_value = self.current_settings.get("whisper/language", "auto")
             language_index = self.language_combo.findText(language_value)
             if language_index >= 0:
@@ -774,14 +697,14 @@ class PreferencesDialog(BaseDialog):
             
             # Audio settings
             self.sound_effects_checkbox.setChecked(self.current_settings.get("audio/effects_enabled", True))
-            self.start_tone_edit.setText(self.current_settings.get("audio/start_tone", "assets/sound_start_v9.wav"))
-            self.stop_tone_edit.setText(self.current_settings.get("audio/stop_tone", "assets/sound_end_v9.wav"))
-            
+
             # Initialize device list
             self.refresh_device_list(is_initial_load=True)
-            
-            # Transcription settings
-            self.model_combo.setCurrentText(self.current_settings.get("whisper/model_name", "tiny"))
+
+            # Model settings
+            model_value = self.current_settings.get("whisper/model_name", "base")
+            self.model_combo.setCurrentText(model_value)
+            self._update_model_info(model_value)
             self.speed_mode_checkbox.setChecked(self.current_settings.get("whisper/speed_mode", True))
             
             # Expert mode settings
@@ -807,12 +730,11 @@ class PreferencesDialog(BaseDialog):
         """Disconnect all setting change signals to prevent triggering during load."""
         try:
             # Disconnect combo box signals
-            self.theme_combo.currentTextChanged.disconnect()
             self.language_combo.currentTextChanged.disconnect()
+            self.model_combo.currentTextChanged.disconnect()
             self.indicator_position_combo.currentTextChanged.disconnect()
             self.hotkey_combo.currentTextChanged.disconnect()
-            self.model_combo.currentTextChanged.disconnect()
-            
+
             # Disconnect checkbox signals
             self.auto_paste_checkbox.stateChanged.disconnect()
             self.toggle_mode_checkbox.stateChanged.disconnect()
@@ -823,27 +745,21 @@ class PreferencesDialog(BaseDialog):
             self.sound_effects_checkbox.stateChanged.disconnect()
             self.speed_mode_checkbox.stateChanged.disconnect()
             self.expert_mode_checkbox.stateChanged.disconnect()
-            
-            # Disconnect line edit signals
-            self.start_tone_edit.textChanged.disconnect()
-            self.stop_tone_edit.textChanged.disconnect()
-            
+
             # Disconnect slider signals
             self.temperature_slider.valueChanged.disconnect()
-            
+
         except TypeError:
-            # Signals were not connected, ignore
             pass
     
     def _connect_signals(self):
         """Reconnect all setting change signals after loading is complete."""
         # Connect combo box signals
-        self.theme_combo.currentTextChanged.connect(self.on_setting_changed)
         self.language_combo.currentTextChanged.connect(self.on_setting_changed)
+        self.model_combo.currentTextChanged.connect(self._on_model_combo_changed)
         self.indicator_position_combo.currentTextChanged.connect(self.on_setting_changed)
         self.hotkey_combo.currentTextChanged.connect(self.on_setting_changed)
-        self.model_combo.currentTextChanged.connect(self.on_setting_changed)
-        
+
         # Connect checkbox signals
         self.auto_paste_checkbox.stateChanged.connect(self.on_setting_changed)
         self.toggle_mode_checkbox.stateChanged.connect(self.on_setting_changed)
@@ -854,11 +770,7 @@ class PreferencesDialog(BaseDialog):
         self.sound_effects_checkbox.stateChanged.connect(self.on_setting_changed)
         self.speed_mode_checkbox.stateChanged.connect(self.on_setting_changed)
         self.expert_mode_checkbox.stateChanged.connect(self.on_expert_mode_changed)
-        
-        # Connect line edit signals
-        self.start_tone_edit.textChanged.connect(self.on_setting_changed)
-        self.stop_tone_edit.textChanged.connect(self.on_setting_changed)
-        
+
         # Connect slider signals
         self.temperature_slider.valueChanged.connect(self.on_temperature_changed)
     
@@ -893,8 +805,9 @@ class PreferencesDialog(BaseDialog):
         try:
             # Get current values
             settings = {
-                "ui/theme": self.theme_combo.currentText(),
                 "whisper/language": self.language_combo.currentText(),
+                "whisper/model_name": self.model_combo.currentText(),
+                "whisper/speed_mode": self.speed_mode_checkbox.isChecked(),
                 "behavior/auto_paste": self.auto_paste_checkbox.isChecked(),
                 "behavior/toggle_mode": self.toggle_mode_checkbox.isChecked(),
                 "behavior/minimize_to_tray": self.minimize_to_tray_checkbox.isChecked(),
@@ -902,10 +815,6 @@ class PreferencesDialog(BaseDialog):
                 "behavior/indicator_position": self.indicator_position_combo.currentText(),
                 "behavior/hotkey": self.hotkey_combo.currentText(),
                 "audio/effects_enabled": self.sound_effects_checkbox.isChecked(),
-                "audio/start_tone": self.start_tone_edit.text(),
-                "audio/stop_tone": self.stop_tone_edit.text(),
-                "whisper/model_name": self.model_combo.currentText(),
-                "whisper/speed_mode": self.speed_mode_checkbox.isChecked(),
                 "whisper/temperature": self.temperature_slider.value() / 100.0,
                 "advanced/expert_mode": self.expert_mode_checkbox.isChecked(),
             }
@@ -986,40 +895,35 @@ class PreferencesDialog(BaseDialog):
         self.indicator_position_combo.setEnabled(enabled)
         self.on_setting_changed()
     
-    def browse_tone_file(self, tone_type: str):
-        """Browse for tone file."""
-        file_path, _ = QFileDialog.getOpenFileName(
-            self,
-            f"Select {tone_type} tone file",
-            "assets",
-            "Audio Files (*.wav *.mp3 *.ogg);;All Files (*)"
-        )
-        
-        if file_path:
-            if tone_type == "start":
-                self.start_tone_edit.setText(file_path)
-            else:
-                self.stop_tone_edit.setText(file_path)
-            self.on_setting_changed()
-    
-    def test_tone(self, tone_type: str):
-        """Test the selected tone file."""
-        try:
-            tone_path = self.start_tone_edit.text() if tone_type == "start" else self.stop_tone_edit.text()
-            
-            if not tone_path or not os.path.exists(tone_path):
-                QMessageBox.warning(self, "File Not Found", f"The {tone_type} tone file was not found.")
-                return
-            
-            # Create and play sound effect
-            effect = QSoundEffect()
-            effect.setSource(QUrl.fromLocalFile(tone_path))
-            effect.setVolume(0.5)
-            effect.play()
-            
-        except Exception as e:
-            QMessageBox.critical(self, "Error", f"Failed to play {tone_type} tone: {e}")
-    
+    def _on_model_combo_changed(self, model_name: str):
+        """Handle model combo selection — update info label then persist the change."""
+        self._update_model_info(model_name)
+        self.on_setting_changed()
+
+    def _update_model_info(self, model_name: str):
+        """Update the download/cache status label for the selected model."""
+        import pathlib
+        model_sizes = {
+            "tiny": 39, "base": 74, "small": 244, "medium": 769, "large": 1550
+        }
+        cache_dir = pathlib.Path.home() / ".cache" / "huggingface" / "hub"
+        model_cache = cache_dir / f"models--Systran--faster-whisper-{model_name}"
+        size_mb = model_sizes.get(model_name, 0)
+
+        if model_cache.exists() and any(model_cache.iterdir()):
+            self.model_download_label.setText(f"Cached locally ({size_mb} MB)")
+            self.model_download_label.setStyleSheet(
+                "color: #4caf50; font-size: 11px; padding: 2px 0;"
+            )
+        else:
+            self.model_download_label.setText(
+                f"Not cached — will download on first use (~{size_mb} MB)"
+            )
+            self.model_download_label.setStyleSheet(
+                "color: #ff9800; font-size: 11px; padding: 2px 0;"
+            )
+        self.model_download_label.setVisible(True)
+
     def restore_defaults(self):
         """Restore all settings to defaults."""
         reply = QMessageBox.question(

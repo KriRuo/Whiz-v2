@@ -371,16 +371,6 @@ class MainWindow(QMainWindow):
             if "audio/effects_enabled" in settings:
                 self.sound_enabled = settings["audio/effects_enabled"]
             
-            if "audio/start_tone" in settings:
-                start_tone = settings["audio/start_tone"]
-                if os.path.exists(start_tone):
-                    self.sound_start.setSource(QUrl.fromLocalFile(start_tone))
-            
-            if "audio/stop_tone" in settings:
-                stop_tone = settings["audio/stop_tone"]
-                if os.path.exists(stop_tone):
-                    self.sound_end.setSource(QUrl.fromLocalFile(stop_tone))
-            
             # Emit signal for SpeechApp to handle other settings
             self.settings_changed.emit(settings)
             
