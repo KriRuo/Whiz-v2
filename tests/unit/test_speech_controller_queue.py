@@ -34,6 +34,7 @@ def _make_controller():
     ctrl.transcription_service = MagicMock()
     ctrl.transcription_service.model_loading = False
     ctrl.transcription_service.model_loaded = True
+    ctrl.transcription_service.is_model_loaded.return_value = True
     ctrl.recording_service = MagicMock()
     ctrl.hotkey_manager = MagicMock()
 
@@ -41,6 +42,11 @@ def _make_controller():
 
 
 class TestAudioQueue(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        from PyQt5.QtWidgets import QApplication
+        cls._app = QApplication.instance() or QApplication([])
 
     def test_audio_queued_when_model_loading(self):
         """_transcribe_audio stores path when model is still loading."""
@@ -91,6 +97,10 @@ class TestAudioQueue(unittest.TestCase):
     def test_queued_audio_transcribed_after_model_ready(self):
         """preload_model flushes queue after ensure_model_loaded completes."""
         ctrl = _make_controller()
+        # Model is not yet loaded — preload_model should start loading
+        ctrl.transcription_service.model_loaded = False
+        ctrl.transcription_service.model_loading = False
+        ctrl.transcription_service.is_model_loaded.return_value = False
 
         transcribed = []
 
@@ -102,10 +112,7 @@ class TestAudioQueue(unittest.TestCase):
         ctrl.transcription_service.ensure_model_loaded = fake_ensure_loaded
         ctrl._do_transcription = lambda path: transcribed.append(path)
 
-        # Queue an audio path before loading completes
         ctrl._queued_audio_path = "queued.wav"
-        ctrl.transcription_service.model_loading = True
-
         ctrl.preload_model()
 
         # Wait for background thread to finish
@@ -117,6 +124,10 @@ class TestAudioQueue(unittest.TestCase):
     def test_queue_cleared_after_flush(self):
         """After queued audio is transcribed, _queued_audio_path is reset to None."""
         ctrl = _make_controller()
+        # Model is not yet loaded — preload_model should start loading
+        ctrl.transcription_service.model_loaded = False
+        ctrl.transcription_service.model_loading = False
+        ctrl.transcription_service.is_model_loaded.return_value = False
         ctrl.transcription_service.ensure_model_loaded = lambda: None
         ctrl._do_transcription = MagicMock()
         ctrl._queued_audio_path = "pending.wav"
@@ -129,9 +140,18 @@ class TestAudioQueue(unittest.TestCase):
 
 class TestEagerPreload(unittest.TestCase):
 
+    @classmethod
+    def setUpClass(cls):
+        from PyQt5.QtWidgets import QApplication
+        cls._app = QApplication.instance() or QApplication([])
+
     def test_preload_model_triggers_ensure_model_loaded(self):
         """preload_model must call transcription_service.ensure_model_loaded in background."""
         ctrl = _make_controller()
+        # Model is not yet loaded — preload_model should start loading
+        ctrl.transcription_service.model_loaded = False
+        ctrl.transcription_service.model_loading = False
+        ctrl.transcription_service.is_model_loaded.return_value = False
         called = threading.Event()
 
         def record_call():

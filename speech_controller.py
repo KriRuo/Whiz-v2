@@ -92,7 +92,8 @@ class SpeechController:
         self._queued_audio_path: Optional[str] = None
         self._queue_lock = threading.Lock()
 
-        # Eager preload — no timer delay
+        # Eager preload — ctranslate2 is already imported before Qt (main.py) so
+        # no DLL conflict can occur here regardless of which thread loads the model.
         self.preload_model()
 
         logger.info("SpeechController initialized successfully")
@@ -231,19 +232,30 @@ class SpeechController:
             return "not_loaded"
     
     def preload_model(self):
-        """Preload the Whisper model in a background thread, then flush any queued audio."""
-        def _background_load():
-            self.transcription_service.ensure_model_loaded()
-            with self._queue_lock:
-                queued = self._queued_audio_path
-                self._queued_audio_path = None
-            if queued:
-                logger.info(f"Model ready — transcribing queued audio: {queued}")
-                self._do_transcription(queued)
+        """Preload the Whisper model in a QThread, then flush any queued audio.
 
-        load_thread = threading.Thread(target=_background_load, daemon=True)
-        load_thread.start()
-        logger.info("Started background model loading...")
+        Returns False immediately if the model is already loaded or loading.
+        """
+        if (self.transcription_service.is_model_loaded()
+                or self.transcription_service.model_loading):
+            return False
+
+        from PyQt5.QtCore import QThread
+        controller = self
+
+        class _ModelLoadThread(QThread):
+            def run(self_thread):
+                controller.transcription_service.ensure_model_loaded()
+                with controller._queue_lock:
+                    queued = controller._queued_audio_path
+                    controller._queued_audio_path = None
+                if queued:
+                    logger.info(f"Model ready — transcribing queued audio: {queued}")
+                    controller._do_transcription(queued)
+
+        self._load_thread = _ModelLoadThread()
+        self._load_thread.start()
+        logger.info("Started background model loading (QThread)...")
         return True
     
     def set_status_callback(self, callback: Callable[[str], None]):
