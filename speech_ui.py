@@ -91,7 +91,13 @@ class SpeechApp(MainWindow):
         # Model loading already started eagerly in SpeechController.__init__.
         # Trigger UI status update so the footer reflects the loading state immediately.
         QTimer.singleShot(0, self.start_background_model_loading)
-        
+
+        # Poll every 250 ms; dismiss the loading mascot as soon as model is ready.
+        self._model_poll_timer = QTimer(self)
+        self._model_poll_timer.setInterval(250)
+        self._model_poll_timer.timeout.connect(self._check_model_ready)
+        self._model_poll_timer.start()
+
         # Mark initialization as complete after a short delay
         QTimer.singleShot(1000, self._mark_initialization_complete)
     
@@ -171,6 +177,13 @@ class SpeechApp(MainWindow):
         except Exception as e:
             logger.error(f"Error cleaning up visual indicator: {e}")
     
+    def _check_model_ready(self):
+        """Dismiss the loading mascot once the Whisper model has finished loading."""
+        if self.controller.get_model_status() == "loaded":
+            self._model_poll_timer.stop()
+            if hasattr(self, 'record_tab'):
+                self.record_tab.set_loading_mode(False)
+
     def _mark_initialization_complete(self):
         """Mark initialization as complete to enable sounds"""
         self._is_initializing = False

@@ -49,6 +49,9 @@
     - Creates a `SystemTrayIcon` when the tray is available.
     - Wires tray signals to `show_from_tray`, `show_settings`, and `quit_application`.
     - Updates a `behavior/system_tray_available` setting via `SettingsManager`.
+  - `SystemTrayIcon.set_state(state)`:
+    - `"recording"` → red-dot overlay icon; any other state → default app icon.
+    - Called by `SpeechController` on recording start/stop via the recording-state callback.
   - `set_minimize_to_tray(enabled)` toggles tray behavior and updates tray menu text.
   - `closeEvent(event)`:
     - If minimize-to-tray is enabled and tray exists, hides to tray and ignores the close event.

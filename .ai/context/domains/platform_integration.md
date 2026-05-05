@@ -17,6 +17,10 @@
 - `core/platform_features.py`
   - Higher-level feature detection (e.g., whether particular hotkey modes, auto-paste, or visual behaviors are supported on the current OS).
   - Used by `SpeechController` to tailor capabilities and fallbacks.
+- `core/windows_startup.py`
+  - `WindowsStartupManager`: manages Windows run-at-startup via `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`.
+  - `enable(exe_path)` registers `"<exe_path> --tray"`; `disable()` removes the entry (no-op if absent); `is_enabled()` checks for the entry.
+  - Wired to the "Start with Windows" checkbox in `ui/preferences_dialog.py`. Windows-only — not imported on other platforms.
 - Installers & Launchers
   - `installer-windows.iss`, `installers/`:
     - Windows-specific installer packaging, shortcuts, icons, and asset layout.

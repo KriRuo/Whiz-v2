@@ -15,7 +15,7 @@
 - `speech_controller.py`
   - Owns `AudioManager` and orchestrates recording lifecycle.
   - Coordinates hotkeys, audio, and Whisper model usage.
-  - Manages lazy model loading, pending transcription queue, and background work.
+  - Manages eager model preload on init (QThread), depth-1 audio queue during model load, and background work.
   - Applies error classification and retry policies via `core.transcription_exceptions`.
 - `core/transcription_exceptions.py`
   - Defines domain-specific exception types (model loading, audio processing, file I/O, Whisper failures, timeouts).
@@ -30,8 +30,8 @@
    - Audio levels are sent to UI callbacks for waveform and indicators.
 3. On stop:
    - `AudioManager` stops and flushes frames to a sandboxed WAV file.
-   - `SpeechController` ensures a Whisper model is loaded (lazily, in a background thread).
-   - Transcription is executed (Faster-Whisper by default, with engine/model selection from settings).
+   - `SpeechController` checks if the model is ready. If still loading, audio path is queued (depth-1, last wins) and processed when the model finishes.
+   - Transcription is executed (Faster-Whisper by default). Device resolved at load time: CUDA → `float16`, CPU → `int8`.
    - Exceptions are classified; retries are applied where appropriate.
    - On success, the transcript is logged, the UI is updated, and auto-paste is performed if enabled.
 
@@ -39,9 +39,8 @@
 - Audio capture must be **non-blocking** and **thread-safe**, keeping the UI responsive.
 - Device enumeration and selection should be **robust** against missing/invalid devices, with sensible fallbacks.
 - All file paths for audio recording must go through sandbox/path validation helpers.
-- Whisper engines and models may be large and slow to load:
-  - Prefer lazy, background initialization.
-  - Avoid blocking the UI during model loading.
+- Whisper model is preloaded eagerly at startup (QThread), not lazily. The UI is non-blocking because preload runs in a background thread — but the model will be ready sooner than on-demand loading.
+- If a recording completes before the model is ready, the audio path is held in a depth-1 slot; a second recording discards the first (last-wins).
 - Auto-paste is optional and should respect platform capabilities and user configuration.
 
 

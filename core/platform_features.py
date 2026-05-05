@@ -62,37 +62,26 @@ class PlatformFeatures:
         }
         
         try:
-            # Check for sounddevice
             import sounddevice as sd
-            features["recording"] = FeatureStatus.AVAILABLE
+            # Query once and reuse — each call polls all audio drivers.
+            devices = sd.query_devices()
+
             features["device_selection"] = FeatureStatus.AVAILABLE
             features["real_time_levels"] = FeatureStatus.AVAILABLE
-            
-            # Check for available devices
-            devices = sd.query_devices()
-            input_devices = [d for d in devices if d['max_input_channels'] > 0]
-            
-            if len(input_devices) > 0:
-                features["recording"] = FeatureStatus.AVAILABLE
-            else:
-                features["recording"] = FeatureStatus.UNAVAILABLE
-                
+            features["recording"] = (
+                FeatureStatus.AVAILABLE
+                if any(d['max_input_channels'] > 0 for d in devices)
+                else FeatureStatus.UNAVAILABLE
+            )
+            features["playback"] = (
+                FeatureStatus.AVAILABLE
+                if any(d['max_output_channels'] > 0 for d in devices)
+                else FeatureStatus.UNAVAILABLE
+            )
         except ImportError:
             logger.warning("sounddevice not available")
         except Exception as e:
             logger.warning(f"Audio detection error: {e}")
-        
-        try:
-            # Check for playback capabilities
-            import sounddevice as sd
-            devices = sd.query_devices()
-            output_devices = [d for d in devices if d['max_output_channels'] > 0]
-            
-            if len(output_devices) > 0:
-                features["playback"] = FeatureStatus.AVAILABLE
-                
-        except Exception as e:
-            logger.warning(f"Playback detection error: {e}")
         
         return features
     
@@ -134,26 +123,20 @@ class PlatformFeatures:
         try:
             # Check for pyautogui
             import pyautogui
-            
+
             features["text_pasting"] = FeatureStatus.AVAILABLE
-            
-            # Check clipboard access
+
+            # Check clipboard access by import only — avoid writing to the clipboard
+            # at startup (Win32 OpenClipboard is a cooperative mutex and can block if
+            # another process holds the lock).
             try:
-                import pyperclip
-                pyperclip.copy("test")
-                test_content = pyperclip.paste()
-                if test_content == "test":
-                    features["clipboard_access"] = FeatureStatus.AVAILABLE
-                else:
-                    features["clipboard_access"] = FeatureStatus.LIMITED
-            except:
+                import pyperclip  # noqa: F401
+                features["clipboard_access"] = FeatureStatus.AVAILABLE
+            except ImportError:
                 features["clipboard_access"] = FeatureStatus.UNAVAILABLE
-            
-            # Check platform-specific requirements
-            platform = PlatformUtils.get_platform()
-            
+
             features["permissions_required"] = False
-            
+
         except ImportError:
             logger.warning("pyautogui not available")
         except Exception as e:

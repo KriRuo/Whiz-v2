@@ -2,7 +2,7 @@
 Record Tab using new layout system and base components.
 """
 
-from PyQt5.QtWidgets import QWidget, QLabel, QVBoxLayout, QHBoxLayout
+from PyQt5.QtWidgets import QWidget, QLabel, QVBoxLayout, QHBoxLayout, QStackedWidget
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QFont
 from ui.components import BaseTab, StatusDisplay, ActionButton, ButtonGroup, InfoPanel, AnimationCircleWidget
@@ -39,13 +39,23 @@ class RecordTab(BaseTab):
         
         # Animated circle (now responsive) - centered using horizontal layout
         self.animation_circle = AnimationCircleWidget()
-        
+
+        # Loading mascot shown while the Whisper model preloads
+        from ui.widgets.loading_mascot_widget import LoadingMascotWidget
+        self.mascot_widget = LoadingMascotWidget()
+
+        # Stack: index 0 = mascot (startup), index 1 = circle (ready)
+        self._circle_stack = QStackedWidget()
+        self._circle_stack.addWidget(self.mascot_widget)
+        self._circle_stack.addWidget(self.animation_circle)
+        self._circle_stack.setCurrentIndex(0)
+
         # Create horizontal layout for proper centering
         circle_h_layout = QHBoxLayout()
         circle_h_layout.setSpacing(0)
         circle_h_layout.setContentsMargins(0, 0, 0, 0)
         circle_h_layout.addStretch()
-        circle_h_layout.addWidget(self.animation_circle)
+        circle_h_layout.addWidget(self._circle_stack)
         circle_h_layout.addStretch()
         
         self.main_layout.addLayout(circle_h_layout)
@@ -108,6 +118,17 @@ class RecordTab(BaseTab):
         bottom_spacer = QSpacerItem(20, bottom_spacing, QSizePolicy.Minimum, QSizePolicy.Expanding)
         self.main_layout.addItem(bottom_spacer)
         
+    def set_loading_mode(self, loading: bool) -> None:
+        """Switch between loading mascot (True) and the animation circle (False)."""
+        if loading:
+            self._circle_stack.setCurrentIndex(0)
+        else:
+            def _swap():
+                self._circle_stack.setCurrentIndex(1)
+
+            self.mascot_widget.finished.connect(_swap)
+            self.mascot_widget.stop_and_hide()
+
     def update_status(self, status: str):
         """Update the status display."""
         self.status_label.setText(status)

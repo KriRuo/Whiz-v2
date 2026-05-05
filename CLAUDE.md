@@ -15,13 +15,14 @@ install_ffmpeg.bat                          # Windows: FFmpeg codec support
 python scripts/tools/verify_setup.py       # Verify environment
 
 # Run
-python main.py                             # Direct launch
-python main_with_splash.py                 # With splash screen
+python main.py                             # Direct launch (no splash)
+python main_with_splash.py                 # With animated splash + mascot
 
 # Tests
 python -m pytest tests/ -v                 # Full suite
 python -m pytest tests/unit/test_settings_manager.py -v   # Single file
 python -m pytest tests/integration/ -v    # Integration only
+python -m pytest tests/test_splash_screen.py -v           # Splash screen
 ```
 
 ## Workflow
@@ -54,7 +55,9 @@ Platform      core/platform_*, scripts/
 
 ### Key flows
 
-**Startup:** `main.py` → single-instance check → init logging/settings/SpeechController → create UI → background Whisper model load
+**Startup (direct):** `main.py` → single-instance check → init logging/settings/SpeechController → create UI → background Whisper model load
+
+**Startup (splash):** `main_with_splash.py` → env vars + ctranslate2 import → single-instance check → show `SplashScreen` (with `LoadingMascotWidget`) → `SpeechController` starts background model load → 250 ms poll loop on `controller.get_model_status()` → on `"loaded"`: dismiss splash → show main window
 
 **Recording → Transcription:** hotkey/UI → `HotkeyManager` → `SpeechController` → `AudioManager` starts stream → frames queued → on stop: audio written to sandboxed temp file → Whisper transcribes → result emitted via Qt signals → UI update + optional auto-paste
 
@@ -70,6 +73,8 @@ Long-running work (model loading, audio processing) runs in worker threads. UI u
 
 Windows gets a custom frameless titlebar (`ui/custom_titlebar.py`) and startup registry integration (`core/windows_startup.py`). Platform detection lives in `core/platform_utils.py`. Platform-specific code is isolated under `core/platform_*` — keep it there.
 
+**Windows DLL import order (critical):** `main.py` sets `OMP_NUM_THREADS=1` and `KMP_DUPLICATE_LIB_OK=TRUE` then imports `ctranslate2` *before* any PyQt5 module. Both libraries ship an OpenMP runtime DLL on Windows; whichever loads first claims the shared allocator. If Qt loads first, `ctranslate2.WhisperModel()` silently segfaults at model-load time. Do not reorder these imports.
+
 ## Conventions
 
 **Settings:** Add new keys to `core/settings_schema.py` first, then consume them. Never use raw `QSettings` calls outside `SettingsManager`.
@@ -82,7 +87,11 @@ Windows gets a custom frameless titlebar (`ui/custom_titlebar.py`) and startup r
 
 **Path safety:** All temp file I/O must go through `core/path_validation.py` sandboxing — never write to arbitrary paths.
 
+**Device selection:** Transcription uses `device="auto"` in `TranscriptionConfig`, resolved at model-load time in `core/transcription_service.py`: CUDA → `float16`, CPU → `int8`. The `compute_type` field in the config is overridden by this logic. CUDA failures fall back to CPU silently (logged at WARNING).
+
 **Tests:** Unit tests under `tests/unit/`, integration under `tests/integration/`. Use `tests/conftest.py` fixtures.
+
+**Splash / loading mascot:** `SplashScreen` (`splash_screen.py`) embeds `LoadingMascotWidget` (`ui/widgets/loading_mascot_widget.py`). Stop the mascot by calling `splash.dismiss()` — it fades out and emits `finished`. In `main_with_splash.py` the dismiss is triggered when model load completes; in legacy mode the mascot placeholder is in `ui/record_tab.py` (disabled).
 
 ## AI Context Files
 

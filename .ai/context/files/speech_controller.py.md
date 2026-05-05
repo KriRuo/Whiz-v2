@@ -3,7 +3,7 @@
 ### Purpose
 - Central controller for **recording, transcription, and integrations**:
   - Owns `AudioManager` and `HotkeyManager`.
-  - Manages Whisper / Faster-Whisper model lifecycle (lazy/background loading, retries).
+  - Manages Whisper / Faster-Whisper model lifecycle (eager preload on init via QThread, retries).
   - Coordinates UI callbacks (status, recording state, transcripts, audio levels).
   - Registers cleanup tasks for audio, hotkeys, models, and temp files.
 
@@ -20,15 +20,12 @@
     - `stop_recording()` → stops audio, collects frames, and calls `process_recorded_audio()`.
     - `toggle_recording()` → convenience wrapper used for toggle mode.
 - **Model Management**
-  - `_ensure_model_loaded()`:
-    - Uses a `Condition` to coordinate concurrent callers, with a timeout from `TIMEOUT_CONFIG`.
-    - Starts `_load_model_implementation()` outside the lock when needed.
-  - `_load_model_implementation()`:
-    - Lazily imports Whisper libraries and checks CUDA.
-    - Prefers Faster-Whisper with device/compute-type selection; falls back to OpenAI Whisper on failure.
-    - Enforces valid model sizes and checks available memory (`check_available_memory` from `path_validation`).
-    - Wrapped in `@with_retry("model_loading")` and uses `classify_exception` for consistent errors.
-  - Background preloading via `preload_model()` / `_background_load_model()` keeps UI responsive.
+  - `preload_model()`:
+    - Called eagerly in `__init__()`. Spawns a `QThread` (`_ModelLoadThread`) that calls `transcription_service.ensure_model_loaded()`.
+    - After model is ready, flushes `_queued_audio_path` if an audio file was captured during load.
+  - Audio queuing during load:
+    - `_transcribe_audio()` checks `transcription_service.model_loading`; if true, stores the path in `_queued_audio_path` (depth-1 Optional[str] + lock — last recording wins, earlier ones discarded).
+    - Once `_ModelLoadThread` finishes, queued path is consumed and transcribed.
 - **Transcription**
   - `process_recorded_audio()`:
     - Validates frames and writes a WAV file through `AudioManager.save_audio_to_file`.

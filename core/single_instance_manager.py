@@ -148,7 +148,7 @@ class SingleInstanceManager:
                         # Get PID from file lock for window activation
                         existing_pid, _ = self._read_lock_file()
                         
-                        if existing_pid and self._is_process_running(existing_pid):
+                        if existing_pid and self._is_process_running(existing_pid) and self._is_whiz_process(existing_pid):
                             if self._activate_existing_window():
                                 logger.info("Successfully activated existing window")
                                 return True, "Existing instance activated"
@@ -156,7 +156,7 @@ class SingleInstanceManager:
                                 logger.warning("Failed to activate existing window")
                                 return False, "Existing instance found but could not be activated"
                         else:
-                            # Stale lock - clean up and try again
+                            # Stale lock - PID gone, reused by non-Whiz process, or lock file missing
                             logger.warning("Stale Qt lock detected, cleaning up")
                             self._cleanup_qt_lock()
                             # Retry once
@@ -381,6 +381,21 @@ class SingleInstanceManager:
         except Exception as e:
             logger.warning(f"Error checking if process {pid} exists: {e}")
             return False
+
+    def _is_whiz_process(self, pid: int) -> bool:
+        """Check if the PID belongs to a Whiz/Python process.
+
+        PIDs are recycled on Windows; a running PID doesn't mean it's Whiz.
+        Returns False (treat as stale) if the process can't be identified as Whiz.
+        """
+        try:
+            proc = psutil.Process(pid)
+            name = proc.name().lower()
+            cmdline = " ".join(proc.cmdline()).lower()
+            return "python" in name or "whiz" in name or "whiz" in cmdline
+        except (psutil.NoSuchProcess, psutil.AccessDenied, Exception) as e:
+            logger.warning(f"Could not verify process {pid} identity: {e}")
+            return False  # treat as stale
     
     def _activate_existing_window(self) -> bool:
         """
