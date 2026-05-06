@@ -5,7 +5,7 @@ Record Tab using new layout system and base components.
 from PyQt5.QtWidgets import QWidget, QLabel, QVBoxLayout, QHBoxLayout, QStackedWidget
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QFont
-from ui.components import BaseTab, StatusDisplay, ActionButton, ButtonGroup, InfoPanel, AnimationCircleWidget
+from ui.components import BaseTab, StatusDisplay, InfoPanel, AnimationCircleWidget
 from ui.layout_system import (LayoutBuilder, LayoutTokens, ColorTokens, 
                              ResponsiveFontSize, AdaptiveSpacing, DPIScalingHelper)
 from ui.styles.main_styles import MainStyles
@@ -30,7 +30,6 @@ class RecordTab(BaseTab):
 
         # Get responsive spacing values
         animation_spacing = AdaptiveSpacing.get_spacing(1)
-        button_spacing = AdaptiveSpacing.get_spacing(20)
 
         # Expanding top spacer — pushes content to vertical center together with bottom spacer
         top_spacer = QSpacerItem(20, 0, QSizePolicy.Minimum, QSizePolicy.Expanding)
@@ -59,40 +58,10 @@ class RecordTab(BaseTab):
         
         self.main_layout.addLayout(circle_h_layout)
         
-        # Add spacing between animation circle and buttons using a fixed-height widget
-        spacer_widget = QWidget()
-        spacer_widget.setMinimumHeight(button_spacing)
-        spacer_widget.setMaximumHeight(button_spacing)
-        spacer_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        spacer_widget.setStyleSheet("background-color: transparent;")
-        self.main_layout.addWidget(spacer_widget)
-        
-        # Single toggle button — label and style change with recording state
-        self.record_button = ActionButton("Start", "primary")
-        self.record_button.setObjectName("RecordButton")
-        self.record_button.setFixedHeight(49)
-        self.record_button.setMinimumWidth(180)
-
-        # Button group - centered using horizontal layout
-        responsive_button_spacing = AdaptiveSpacing.get_spacing(LayoutTokens.SPACING_MD)
-        button_group = ButtonGroup([self.record_button], responsive_button_spacing)
-
-        button_h_layout = QHBoxLayout()
-        button_h_layout.addStretch()
-        button_h_layout.addWidget(button_group)
-        button_h_layout.addStretch()
-
-        self.main_layout.addLayout(button_h_layout)
-
-        # Wire toggle from button and from circle click
-        self.record_button.clicked.connect(self._on_toggle_recording)
+        # Wire circle click as the sole toggle trigger
         self.animation_circle.clicked.connect(self._on_toggle_recording)
-        
-        # Add responsive spacer between buttons and status text
-        buttons_to_status_spacer = QSpacerItem(20, animation_spacing, QSizePolicy.Minimum, QSizePolicy.Fixed)
-        self.main_layout.addItem(buttons_to_status_spacer)
-        
-        # Status text below buttons with responsive font
+
+        # Status text directly below circle
         self.status_label = QLabel("Idle")
         self.status_label.setAlignment(Qt.AlignCenter)
         responsive_font_size = ResponsiveFontSize.get_font_size('lg')
@@ -134,18 +103,14 @@ class RecordTab(BaseTab):
 
         if active:
             self.animation_circle.set_recording(True)
-            if not self._is_recording:
-                self._is_recording = True
-                self._apply_recording_button_style()
+            self._is_recording = True
         elif "Processing" in status:
             self.animation_circle.set_recording(False)
             self.animation_circle.set_processing(True)
         else:
             self.animation_circle.set_recording(False)
             self.animation_circle.set_processing(False)
-            if self._is_recording:
-                self._is_recording = False
-                self._apply_idle_button_style()
+            self._is_recording = False
     
     def update_feature_availability(self):
         """Update UI elements based on feature availability"""
@@ -155,33 +120,30 @@ class RecordTab(BaseTab):
         feature_status = self.parent_app.controller.get_feature_status()
 
         if not feature_status.get("audio_recording", False):
-            self.record_button.setEnabled(False)
-            self.record_button.setToolTip("Audio recording not available on this platform")
+            self.animation_circle.setEnabled(False)
+            self.animation_circle.setToolTip("Audio recording not available on this platform")
         else:
-            self.record_button.setEnabled(True)
-            self.record_button.setToolTip("Click or press hotkey to start recording")
+            self.animation_circle.setEnabled(True)
+            self.animation_circle.setToolTip("Click to start recording")
 
     def set_recording_active(self, active: bool, processing: bool = False):
-        """Sync button and circle from external controller state changes."""
+        """Sync circle from external controller state changes."""
         self._is_recording = active
         if active:
             self.animation_circle.set_recording(True)
             self.animation_circle.set_processing(False)
-            self._apply_recording_button_style()
-            self.record_button.setEnabled(True)
+            self.animation_circle.setEnabled(True)
         elif processing:
             self.animation_circle.set_recording(False)
             self.animation_circle.set_processing(True)
-            self._apply_idle_button_style()
-            self.record_button.setEnabled(False)
+            self.animation_circle.setEnabled(False)
         else:
             self.animation_circle.set_recording(False)
             self.animation_circle.set_processing(False)
-            self._apply_idle_button_style()
-            self.record_button.setEnabled(True)
+            self.animation_circle.setEnabled(True)
 
     def _on_toggle_recording(self):
-        """Toggle recording on/off from button or circle click."""
+        """Toggle recording on/off from circle click."""
         if self._is_recording:
             self._on_stop()
         else:
@@ -191,23 +153,11 @@ class RecordTab(BaseTab):
         self._is_recording = True
         self.parent_app.start_recording()
         self.animation_circle.set_recording(True)
-        self._apply_recording_button_style()
 
     def _on_stop(self):
         self._is_recording = False
         self.parent_app.stop_recording()
         self.animation_circle.set_recording(False)
-        self._apply_idle_button_style()
-
-    def _apply_recording_button_style(self):
-        self.record_button.setText("Stop")
-        self.record_button.button_type = "recording"
-        self.record_button.init_styling()
-
-    def _apply_idle_button_style(self):
-        self.record_button.setText("Start")
-        self.record_button.button_type = "primary"
-        self.record_button.init_styling()
     
     def show_feature_recommendations(self, recommendations):
         """Show recommendations for missing features"""
