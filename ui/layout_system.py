@@ -281,29 +281,29 @@ class ResponsiveSizing:
     # Breakpoint-based sizing configurations
     WINDOW_SIZING = {
         ScreenSizeClass.XSMALL: {
-            'width_percent': 0.25, 'height_percent': 0.50,
-            'min_width': 380, 'min_height': 530,  # Increased by 50px
-            'max_width': 450, 'max_height': 600   # Increased by 50px
+            'width_percent': 0.22, 'height_percent': 0.50,
+            'min_width': 320, 'min_height': 500,
+            'max_width': 380, 'max_height': 580
         },
         ScreenSizeClass.SMALL: {
-            'width_percent': 0.25, 'height_percent': 0.50,
-            'min_width': 380, 'min_height': 530,  # Increased by 50px
-            'max_width': 450, 'max_height': 600   # Increased by 50px
+            'width_percent': 0.22, 'height_percent': 0.50,
+            'min_width': 320, 'min_height': 500,
+            'max_width': 380, 'max_height': 580
         },
         ScreenSizeClass.MEDIUM: {
-            'width_percent': 0.23, 'height_percent': 0.45,
-            'min_width': 380, 'min_height': 530,  # Increased by 50px
-            'max_width': 450, 'max_height': 600   # Increased by 50px
+            'width_percent': 0.20, 'height_percent': 0.45,
+            'min_width': 320, 'min_height': 500,
+            'max_width': 380, 'max_height': 580
         },
         ScreenSizeClass.LARGE: {
-            'width_percent': 0.20, 'height_percent': 0.40,
-            'min_width': 380, 'min_height': 530,  # Increased by 50px
-            'max_width': 450, 'max_height': 600   # Increased by 50px
+            'width_percent': 0.18, 'height_percent': 0.40,
+            'min_width': 320, 'min_height': 500,
+            'max_width': 380, 'max_height': 580
         },
         ScreenSizeClass.XLARGE: {
-            'width_percent': 0.18, 'height_percent': 0.35,
-            'min_width': 380, 'min_height': 530,  # Increased by 50px
-            'max_width': 450, 'max_height': 600   # Increased by 50px
+            'width_percent': 0.16, 'height_percent': 0.35,
+            'min_width': 320, 'min_height': 500,
+            'max_width': 380, 'max_height': 580
         }
     }
     

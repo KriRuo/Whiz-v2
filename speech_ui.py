@@ -273,8 +273,7 @@ class SpeechApp(MainWindow):
                 return
         
         self.controller.start_recording()
-        self.record_tab.start_button.setEnabled(False)
-        self.record_tab.stop_button.setEnabled(True)
+        self.record_tab.set_recording_active(True)
         
         # Play start sound (only after initialization)
         if not self._is_initializing:
@@ -283,8 +282,7 @@ class SpeechApp(MainWindow):
     def stop_recording(self):
         """Stop recording via GUI button"""
         self.controller.stop_recording()
-        self.record_tab.start_button.setEnabled(True)
-        self.record_tab.stop_button.setEnabled(False)
+        self.record_tab.set_recording_active(False)
         
         # Play stop sound (only after initialization)
         if not self._is_initializing:
@@ -355,12 +353,11 @@ class SpeechApp(MainWindow):
             else:
                 self.system_tray.set_state("ready")
         
-        # Update button states based on status
+        # Update button/circle states based on status
         if status == "Recording...":
-            self.record_tab.start_button.setEnabled(False)
-            self.record_tab.stop_button.setEnabled(True)
+            self.record_tab.set_recording_active(True)
             # Show visual indicator if enabled
-            if (self.controller.visual_indicator_enabled and 
+            if (self.controller.visual_indicator_enabled and
                 self.lifecycle_manager.is_widget_active("visual_indicator")):
                 visual_indicator = self.lifecycle_manager.get_widget("visual_indicator")
                 if visual_indicator is not None:
@@ -369,27 +366,26 @@ class SpeechApp(MainWindow):
             if not self._is_initializing:
                 self.play_start_sound()
         elif status == "Idle":
-            self.record_tab.start_button.setEnabled(True)
-            self.record_tab.stop_button.setEnabled(False)
+            self.record_tab.set_recording_active(False)
             # Hide visual indicator
             if hasattr(self, 'visual_indicator') and self.visual_indicator is not None:
                 try:
                     self.visual_indicator.hide_recording()
                 except RuntimeError:
-                    # Widget has been deleted, ignore the error
                     self.visual_indicator = None
             # Play stop sound for hotkey-triggered recording (only after initialization)
             if not self._is_initializing:
                 self.play_stop_sound()
         elif status == "Processing...":
-            self.record_tab.start_button.setEnabled(False)
-            self.record_tab.stop_button.setEnabled(False)
+            self.record_tab.set_recording_active(False, processing=True)
             # Hide visual indicator during processing
             if self.lifecycle_manager.is_widget_active("visual_indicator"):
                 visual_indicator = self.lifecycle_manager.get_widget("visual_indicator")
                 if visual_indicator is not None:
                     visual_indicator.hide_recording()
-            
+        elif "failed" in status.lower() or "error" in status.lower() or "unavailable" in status.lower():
+            self.record_tab.set_recording_active(False)
+
     def update_hotkey_instruction(self):
         """Update the hotkey instruction label in the Record tab"""
         hotkey = self.controller.hotkey

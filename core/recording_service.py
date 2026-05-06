@@ -286,8 +286,9 @@ class RecordingService:
             return False
         
         if current_state == RecordingState.ERROR:
-            logger.error("Cannot start recording: service in error state")
-            return False
+            logger.info("Resetting from error state to allow new recording attempt")
+            self._set_state(RecordingState.IDLE)
+            current_state = RecordingState.IDLE
         
         try:
             # Create safe temporary file for audio
@@ -335,20 +336,24 @@ class RecordingService:
             self._set_state(RecordingState.STOPPING)
             self._update_status("Stopping recording...")
             
-            # Stop audio recording and get file path
-            audio_path = self.audio_manager.stop_recording(self.current_audio_path)
-            
+            # Stop audio recording — returns raw frames, no args accepted
+            frames = self.audio_manager.stop_recording()
+
+            # Save frames to the pre-allocated temp file
+            saved = self.audio_manager.save_audio_to_file(frames, self.current_audio_path)
+
             # Calculate duration
             duration = 0.0
             if self.recording_start_time:
                 duration = time.time() - self.recording_start_time
-            
-            if audio_path and Path(audio_path).exists():
+
+            audio_path = self.current_audio_path
+            if saved and Path(audio_path).exists():
                 self._set_state(RecordingState.IDLE)
                 self._update_status("Recording complete")
-                
+
                 logger.info(f"Recording stopped, duration: {duration:.2f}s, saved to: {audio_path}")
-                
+
                 return RecordingResult(
                     success=True,
                     audio_path=audio_path,
