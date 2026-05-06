@@ -97,79 +97,73 @@ class ActionButton(QPushButton):
         self.button_type = button_type
         self.init_styling()
         
-        # Force smaller button size
-        self.setMaximumHeight(35)  # Reduced from default ~44px
-        self.setMinimumHeight(30)  # Reduced from default ~44px
+        pass  # height set by caller via setFixedHeight()
     
     def init_styling(self):
         """Apply consistent styling based on button type."""
         if self.button_type == "primary":
-            # Cyan start button with subtle glowing border
             self.setStyleSheet(f"""
                 QPushButton {{
-                    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                        stop:0 rgba(45, 49, 57, 0.9), stop:0.3 rgba(35, 39, 47, 0.95), 
-                        stop:0.7 rgba(29, 33, 41, 1.0), stop:1 rgba(25, 29, 37, 1.0));
+                    background: transparent;
                     color: {ColorTokens.TEXT_PRIMARY};
-                    border: 1px solid qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                        stop:0 rgba(0, 212, 255, 0.4), stop:0.3 rgba(0, 232, 255, 0.5), 
-                        stop:0.7 rgba(0, 212, 255, 0.5), stop:1 rgba(0, 192, 235, 0.4));
-                    padding: 8px 16px !important;
+                    border: 1px solid rgba(0, 212, 255, 0.5);
+                    padding: 0px 24px;
                     border-radius: 12px;
                     font-weight: 500;
-                    font-size: 16px;
-                    min-height: 20px;
+                    font-size: 15px;
                 }}
                 QPushButton:hover {{
-                    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                        stop:0 rgba(55, 59, 67, 0.9), stop:0.3 rgba(45, 49, 57, 0.95), 
-                        stop:0.7 rgba(35, 39, 47, 1.0), stop:1 rgba(29, 33, 41, 1.0));
-                    border: 1px solid qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                        stop:0 rgba(0, 232, 255, 0.6), stop:0.3 rgba(0, 252, 255, 0.7), 
-                        stop:0.7 rgba(0, 232, 255, 0.7), stop:1 rgba(0, 212, 255, 0.6));
+                    background: rgba(0, 212, 255, 0.08);
+                    border: 1px solid rgba(0, 232, 255, 0.8);
                 }}
                 QPushButton:pressed {{
-                    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                        stop:0 rgba(0, 180, 230, 0.9), stop:0.3 rgba(0, 160, 210, 0.95), 
-                        stop:0.7 rgba(0, 140, 190, 1.0), stop:1 rgba(0, 120, 170, 1.0));
-                    color: {ColorTokens.BG_PRIMARY};
-                    border-color: rgba(0, 212, 255, 0.8);
+                    background: rgba(0, 212, 255, 0.18);
+                    border-color: rgba(0, 212, 255, 0.9);
+                }}
+            """)
+        elif self.button_type == "recording":
+            self.setStyleSheet(f"""
+                QPushButton {{
+                    background: transparent;
+                    color: rgba(255, 110, 110, 0.9);
+                    border: 1px solid rgba(255, 110, 110, 0.5);
+                    padding: 0px 24px;
+                    border-radius: 12px;
+                    font-weight: 500;
+                    font-size: 15px;
+                }}
+                QPushButton:hover {{
+                    background: rgba(255, 110, 110, 0.08);
+                    border: 1px solid rgba(255, 110, 110, 0.8);
+                    color: rgba(255, 130, 130, 1.0);
+                }}
+                QPushButton:pressed {{
+                    background: rgba(255, 110, 110, 0.18);
+                    border-color: rgba(255, 110, 110, 0.9);
                 }}
             """)
         elif self.button_type == "secondary":
-            # Dark gray stop button with subtle styling
             self.setStyleSheet(f"""
                 QPushButton {{
-                    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                        stop:0 rgba(60, 66, 72, 0.9), stop:0.3 rgba(50, 56, 62, 0.95), 
-                        stop:0.7 rgba(40, 46, 52, 1.0), stop:1 rgba(30, 36, 42, 1.0));
+                    background: transparent;
                     color: {ColorTokens.TEXT_SECONDARY};
-                    border: 1px solid rgba(40, 46, 52, 0.8);
-                    padding: 8px 16px !important;
+                    border: 1px solid rgba(120, 130, 145, 0.35);
+                    padding: 0px 24px;
                     border-radius: 12px;
                     font-weight: 500;
-                    font-size: 16px;
-                    min-height: 20px;
+                    font-size: 15px;
                 }}
                 QPushButton:hover {{
-                    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                        stop:0 rgba(70, 76, 82, 0.9), stop:0.3 rgba(60, 66, 72, 0.95), 
-                        stop:0.7 rgba(50, 56, 62, 1.0), stop:1 rgba(40, 46, 52, 1.0));
-                    border-color: rgba(50, 56, 62, 0.9);
+                    background: rgba(255, 255, 255, 0.05);
+                    border-color: rgba(120, 130, 145, 0.6);
                     color: {ColorTokens.TEXT_PRIMARY};
                 }}
                 QPushButton:pressed {{
-                    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                        stop:0 rgba(30, 36, 42, 1.0), stop:0.3 rgba(25, 31, 37, 1.0), 
-                        stop:0.7 rgba(20, 26, 32, 1.0), stop:1 rgba(15, 21, 27, 1.0));
-                    color: {ColorTokens.TEXT_SECONDARY};
+                    background: rgba(255, 255, 255, 0.1);
                 }}
                 QPushButton:disabled {{
-                    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                        stop:0 rgba(30, 36, 42, 0.6), stop:0.3 rgba(25, 31, 37, 0.7), 
-                        stop:0.7 rgba(20, 26, 32, 0.8), stop:1 rgba(15, 21, 27, 0.9));
-                    color: rgba(155, 163, 175, 0.5);
-                    border-color: rgba(30, 36, 42, 0.4);
+                    color: rgba(155, 163, 175, 0.35);
+                    border-color: rgba(120, 130, 145, 0.15);
                 }}
             """)
         else:
@@ -180,12 +174,11 @@ class ActionButton(QPushButton):
                         stop:0 rgba(60, 66, 72, 0.9), stop:0.3 rgba(50, 56, 62, 0.95), 
                         stop:0.7 rgba(40, 46, 52, 1.0), stop:1 rgba(30, 36, 42, 1.0));
                     color: {ColorTokens.TEXT_PRIMARY};
-                    border: 2px solid {ColorTokens.BORDER_SUBTLE};
-                    padding: 8px 16px !important;
+                    border: 1px solid {ColorTokens.BORDER_SUBTLE};
+                    padding: 0px 24px;
                     border-radius: 12px;
-                    font-weight: 600;
-                    font-size: 16px;
-                    min-height: 20px;
+                    font-weight: 500;
+                    font-size: 15px;
                 }}
                 QPushButton:hover {{
                     background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
