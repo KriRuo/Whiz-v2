@@ -36,7 +36,7 @@ class AnimationCircleWidget(QWidget):
         self._is_processing = False
         
         # Set responsive sizing instead of fixed size
-        self._base_size = 210  # Base size for calculations
+        self._base_size = 175  # Base size for calculations
         self._glow_margin = 20  # Extra margin for glow effects
         
         # Set size policy for responsive behavior
@@ -49,7 +49,7 @@ class AnimationCircleWidget(QWidget):
             self._update_responsive_size()
         except Exception:
             # Fallback to fixed size if responsive sizing fails during startup
-            self.setFixedSize(320, 320)
+            self.setFixedSize(270, 270)
         
         # Initialize animations
         self._init_animations()
@@ -85,7 +85,7 @@ class AnimationCircleWidget(QWidget):
         app = QApplication.instance()
         if app is None:
             # Fallback to fixed size if app not ready
-            self.setFixedSize(320, 320)
+            self.setFixedSize(270, 270)
             return
         
         try:
@@ -112,7 +112,7 @@ class AnimationCircleWidget(QWidget):
             self.setFixedSize(total_size, total_size)
         except Exception:
             # Fallback to fixed size if any error occurs
-            self.setFixedSize(320, 320)
+            self.setFixedSize(270, 270)
     
     def sizeHint(self):
         """Provide size hint for layout system."""
@@ -674,24 +674,19 @@ class AnimationCircleWidget(QWidget):
         pulse_intensity = self._pulse_opacity  # 0.15–0.45 animated range
 
         glow_layers = [
-            (radius + int(radius * 0.35), pulse_intensity * 1.2),  # Wide outer halo
-            (radius + int(radius * 0.22), pulse_intensity * 1.5),  # Mid ring
-            (radius + int(radius * 0.10), pulse_intensity * 1.8),  # Tight inner ring
+            (radius + int(radius * 0.18), pulse_intensity * 0.7),  # Outer ring
+            (radius + int(radius * 0.10), pulse_intensity * 0.9),  # Inner ring
         ]
 
         for glow_radius, opacity in glow_layers:
             radial_gradient = QRadialGradient(center_x, center_y, glow_radius)
 
-            crimson = QColor(220, 50, 50)   # vivid red
-            hot = QColor(255, 90, 60)       # hot orange-red
-
+            crimson = QColor(210, 60, 60)   # muted red
             crimson.setAlphaF(min(opacity, 1.0))
-            hot.setAlphaF(min(opacity * 0.8, 1.0))
 
             radial_gradient.setColorAt(0.0, QColor(0, 0, 0, 0))
-            radial_gradient.setColorAt(0.55, QColor(0, 0, 0, 0))
-            radial_gradient.setColorAt(0.75, hot)
-            radial_gradient.setColorAt(0.88, crimson)
+            radial_gradient.setColorAt(0.65, QColor(0, 0, 0, 0))
+            radial_gradient.setColorAt(0.82, crimson)
             radial_gradient.setColorAt(1.0, QColor(0, 0, 0, 0))
 
             painter.setBrush(QBrush(radial_gradient))
