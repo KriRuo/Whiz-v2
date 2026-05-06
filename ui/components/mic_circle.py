@@ -391,26 +391,26 @@ class AnimationCircleWidget(QWidget):
         # Create multiple layers of soft glow for realistic neon effect - MORE SUBTLE
         # Scale glow distances based on radius (responsive)
         glow_layers = [
-            (radius + int(radius * 0.2), 0.50),  # Outer soft glow - MORE SUBTLE
-            (radius + int(radius * 0.15), 0.60),  # Mid glow - MORE SUBTLE
-            (radius + int(radius * 0.1), 0.70),  # Inner glow - MORE SUBTLE
+            (radius + int(radius * 0.2), 0.80),  # Outer soft glow
+            (radius + int(radius * 0.15), 0.90),  # Mid glow
+            (radius + int(radius * 0.1), 1.00),  # Inner glow
         ]
-        
+
         for glow_radius, opacity in glow_layers:
             # Create conical gradient for rotating color effect
             conical_gradient = QConicalGradient(center_x, center_y, self._rotation_angle * 0.2)  # Very slow rotation
-            
+
             # Define dark blue Tron-like color palette
             dark_blue = QColor(0, 50, 100)      # Deep dark blue
             electric_blue = QColor(0, 100, 200) # Electric blue
             neon_blue = QColor(0, 150, 255)     # Neon blue
             cyan_blue = QColor(0, 200, 255)     # Cyan blue
-            
-            # Apply reduced opacity for subtle effect
-            dark_blue.setAlphaF(opacity * 0.4)
-            electric_blue.setAlphaF(opacity * 0.35)
-            neon_blue.setAlphaF(opacity * 0.3)
-            cyan_blue.setAlphaF(opacity * 0.35)
+
+            # Apply opacity for bright neon effect
+            dark_blue.setAlphaF(opacity * 0.6)
+            electric_blue.setAlphaF(opacity * 0.55)
+            neon_blue.setAlphaF(opacity * 0.5)
+            cyan_blue.setAlphaF(opacity * 0.55)
             
             # Create smooth color transitions
             conical_gradient.setColorAt(0.0, dark_blue)
@@ -554,9 +554,9 @@ class AnimationCircleWidget(QWidget):
         """Draw a dark blue Tron-like glow layer around the entire circle."""
         # Create multiple layers of dark blue glow with slow rotation - MORE SUBTLE
         glow_layers = [
-            (radius + 35, 0.40),  # Inner prominent glow - MORE SUBTLE
-            (radius + 55, 0.25),  # Mid subtle glow - MORE SUBTLE
-            (radius + 55, 0.60),  # Outer glow - MORE SUBTLE
+            (radius + 35, 0.75),  # Inner prominent glow
+            (radius + 55, 0.50),  # Mid glow
+            (radius + 55, 0.90),  # Outer glow
         ]
         
         for glow_radius, opacity in glow_layers:
