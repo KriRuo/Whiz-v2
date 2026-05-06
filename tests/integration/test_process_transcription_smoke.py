@@ -10,10 +10,10 @@ from core.cleanup_manager import reset_cleanup_manager
 
 
 class FakeTranscriptionService:
-    def __init__(self, model_name, device, compute_type):
-        self.model_name = model_name
-        self.device = device
-        self.compute_type = compute_type
+    def __init__(self, config):
+        self.model_name = getattr(config, 'model_name', 'base')
+        self.device = getattr(config, 'device', 'cpu')
+        self.compute_type = getattr(config, 'compute_type', 'int8')
         self.is_ready = False
         self.started = False
         self.stopped = False

@@ -344,7 +344,7 @@ class TestRecordingService(unittest.TestCase):
         service.cancel_recording()
         
         self.assertEqual(service.get_state(), RecordingState.IDLE)
-        mock_audio_manager.stop_recording.assert_called_with(None)
+        mock_audio_manager.stop_recording.assert_called_with()
     
     @patch('core.recording_service.AudioManager')
     def test_get_recording_duration(self, mock_audio_manager_class):
