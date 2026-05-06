@@ -281,29 +281,29 @@ class ResponsiveSizing:
     # Breakpoint-based sizing configurations
     WINDOW_SIZING = {
         ScreenSizeClass.XSMALL: {
-            'width_percent': 0.22, 'height_percent': 0.50,
-            'min_width': 320, 'min_height': 400,
-            'max_width': 380, 'max_height': 480
+            'width_percent': 0.30, 'height_percent': 0.55,
+            'min_width': 420, 'min_height': 480,
+            'max_width': 500, 'max_height': 560
         },
         ScreenSizeClass.SMALL: {
-            'width_percent': 0.22, 'height_percent': 0.50,
-            'min_width': 320, 'min_height': 400,
-            'max_width': 380, 'max_height': 480
+            'width_percent': 0.28, 'height_percent': 0.55,
+            'min_width': 420, 'min_height': 480,
+            'max_width': 500, 'max_height': 560
         },
         ScreenSizeClass.MEDIUM: {
-            'width_percent': 0.20, 'height_percent': 0.45,
-            'min_width': 320, 'min_height': 400,
-            'max_width': 380, 'max_height': 480
+            'width_percent': 0.26, 'height_percent': 0.50,
+            'min_width': 420, 'min_height': 480,
+            'max_width': 500, 'max_height': 560
         },
         ScreenSizeClass.LARGE: {
-            'width_percent': 0.18, 'height_percent': 0.40,
-            'min_width': 320, 'min_height': 400,
-            'max_width': 380, 'max_height': 480
+            'width_percent': 0.24, 'height_percent': 0.45,
+            'min_width': 420, 'min_height': 480,
+            'max_width': 500, 'max_height': 560
         },
         ScreenSizeClass.XLARGE: {
-            'width_percent': 0.16, 'height_percent': 0.35,
-            'min_width': 320, 'min_height': 400,
-            'max_width': 380, 'max_height': 480
+            'width_percent': 0.22, 'height_percent': 0.40,
+            'min_width': 420, 'min_height': 480,
+            'max_width': 500, 'max_height': 560
         }
     }
     
