@@ -7,4 +7,4 @@ if exist "%~dp0..\..\ffmpeg\bin\ffmpeg.exe" (
     set "PATH=%~dp0..\..\ffmpeg\bin;%PATH%"
 )
 
-start "" .venv\Scripts\pythonw.exe main.py
+start "" whiz_env_311\Scripts\pythonw.exe main.py

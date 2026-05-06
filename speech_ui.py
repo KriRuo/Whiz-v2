@@ -414,8 +414,8 @@ class SpeechApp(MainWindow):
             
             if "whisper/temperature" in settings:
                 new_temperature = settings["whisper/temperature"]
-                if hasattr(self.controller, 'temperature'):
-                    self.controller.temperature = new_temperature
+                if hasattr(self.controller, 'set_temperature'):
+                    self.controller.set_temperature(new_temperature)
                     self.update_status(f"Temperature updated to: {new_temperature}")
             
             if "whisper/speed_mode" in settings:

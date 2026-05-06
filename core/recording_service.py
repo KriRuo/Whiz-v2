@@ -286,8 +286,13 @@ class RecordingService:
             return False
         
         if current_state == RecordingState.ERROR:
-            logger.error("Cannot start recording: service in error state")
-            return False
+            logger.info("Resetting from error state to allow new recording attempt")
+            try:
+                # Drain any orphan stream/state from the previous failed stop
+                self.audio_manager.stop_recording()
+            except Exception as reset_err:
+                logger.warning(f"Audio manager reset during error recovery raised: {reset_err}")
+            self._set_state(RecordingState.IDLE)
         
         try:
             # Create safe temporary file for audio
@@ -386,7 +391,7 @@ class RecordingService:
         """Cancel current recording without saving"""
         if self.get_state() == RecordingState.RECORDING:
             try:
-                self.audio_manager.stop_recording(None)  # Don't save
+                self.audio_manager.stop_recording()
                 self._set_state(RecordingState.IDLE)
                 self._update_status("Recording cancelled")
                 logger.info("Recording cancelled")
