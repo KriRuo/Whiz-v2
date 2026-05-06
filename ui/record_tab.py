@@ -47,10 +47,10 @@ class RecordTab(BaseTab):
         self._circle_stack.addWidget(self.mascot_widget)
         self._circle_stack.addWidget(self.animation_circle)
         self._circle_stack.setCurrentIndex(0)
+        from PyQt5.QtWidgets import QSizePolicy as SP
         self._circle_stack.setSizePolicy(SP.Minimum, SP.Minimum)
 
         # Wrap in a full-width row with equal stretches to guarantee centering
-        from PyQt5.QtWidgets import QSizePolicy as SP
         center_row = QHBoxLayout()
         center_row.setContentsMargins(0, 0, 0, 0)
         center_row.setSpacing(0)
