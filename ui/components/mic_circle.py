@@ -37,7 +37,7 @@ class AnimationCircleWidget(QWidget):
         
         # Set responsive sizing instead of fixed size
         self._base_size = 210  # Base size for calculations
-        self._glow_margin = 50  # Extra margin for glow effects
+        self._glow_margin = 20  # Extra margin for glow effects
         
         # Set size policy for responsive behavior
         # Use Fixed for both dimensions to maintain square aspect ratio and proper centering

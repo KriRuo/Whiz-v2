@@ -110,7 +110,7 @@ class ActionButton(QPushButton):
                     padding: 0px 24px;
                     border-radius: 12px;
                     font-weight: 500;
-                    font-size: 15px;
+                    font-size: 13px;
                 }}
                 QPushButton:hover {{
                     background: rgba(0, 212, 255, 0.08);
@@ -130,7 +130,7 @@ class ActionButton(QPushButton):
                     padding: 0px 24px;
                     border-radius: 12px;
                     font-weight: 500;
-                    font-size: 15px;
+                    font-size: 13px;
                 }}
                 QPushButton:hover {{
                     background: rgba(255, 110, 110, 0.08);

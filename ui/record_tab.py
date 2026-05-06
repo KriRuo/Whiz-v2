@@ -68,9 +68,9 @@ class RecordTab(BaseTab):
         self.main_layout.addWidget(spacer_widget)
         
         # Single toggle button — label and style change with recording state
-        self.record_button = ActionButton("Start Recording", "primary")
+        self.record_button = ActionButton("Start", "primary")
         self.record_button.setObjectName("RecordButton")
-        self.record_button.setFixedHeight(52)
+        self.record_button.setFixedHeight(49)
         self.record_button.setMinimumWidth(180)
 
         # Button group - centered using horizontal layout
@@ -200,12 +200,12 @@ class RecordTab(BaseTab):
         self._apply_idle_button_style()
 
     def _apply_recording_button_style(self):
-        self.record_button.setText("Stop Recording")
+        self.record_button.setText("Stop")
         self.record_button.button_type = "recording"
         self.record_button.init_styling()
 
     def _apply_idle_button_style(self):
-        self.record_button.setText("Start Recording")
+        self.record_button.setText("Start")
         self.record_button.button_type = "primary"
         self.record_button.init_styling()
     
