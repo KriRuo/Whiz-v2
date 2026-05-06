@@ -47,11 +47,12 @@ class RecordTab(BaseTab):
         self._circle_stack.addWidget(self.mascot_widget)
         self._circle_stack.addWidget(self.animation_circle)
         self._circle_stack.setCurrentIndex(0)
-        # Ensure the stacked widget never grows wider than its current child
-        from PyQt5.QtWidgets import QSizePolicy as SP
-        self._circle_stack.setSizePolicy(SP.Fixed, SP.Fixed)
+        # Center each child within the stacked layout
+        stacked_layout = self._circle_stack.layout()
+        stacked_layout.setAlignment(self.mascot_widget, Qt.AlignCenter)
+        stacked_layout.setAlignment(self.animation_circle, Qt.AlignCenter)
 
-        self.main_layout.addWidget(self._circle_stack, 0, Qt.AlignHCenter)
+        self.main_layout.addWidget(self._circle_stack)
         
         # Wire circle click as the sole toggle trigger
         self.animation_circle.clicked.connect(self._on_toggle_recording)
