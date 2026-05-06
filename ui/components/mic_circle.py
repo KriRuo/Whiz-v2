@@ -670,35 +670,35 @@ class AnimationCircleWidget(QWidget):
             painter.drawEllipse(glow_rect)
         
     def _draw_recording_glow(self, painter, center_x, center_y, radius, dpi_factor):
-        """Draw subtle dark blue pulse glow when recording (less dramatic)."""
-        # Create subtle pulsing glow layers
-        pulse_intensity = self._pulse_opacity
-        
+        """Draw bright red pulsing glow when recording — clearly distinct from idle."""
+        pulse_intensity = self._pulse_opacity  # 0.15–0.45 animated range
+
         glow_layers = [
-            (radius + 25, pulse_intensity * 0.2),  # Outer pulse (reduced)
-            (radius + 15, pulse_intensity * 0.3),  # Mid pulse (reduced)
-            (radius + 8, pulse_intensity * 0.4),   # Inner pulse (reduced)
+            (radius + int(radius * 0.35), pulse_intensity * 1.2),  # Wide outer halo
+            (radius + int(radius * 0.22), pulse_intensity * 1.5),  # Mid ring
+            (radius + int(radius * 0.10), pulse_intensity * 1.8),  # Tight inner ring
         ]
-        
+
         for glow_radius, opacity in glow_layers:
-            # Create radial gradient for soft glow
             radial_gradient = QRadialGradient(center_x, center_y, glow_radius)
-            
-            # Use subtle electric blue color for recording state
-            electric_blue = QColor(0, 100, 200)  # Electric blue
-            electric_blue.setAlphaF(opacity * 0.5)  # Much more subtle
-            
-            # Create soft falloff
-            radial_gradient.setColorAt(0.0, electric_blue)
-            radial_gradient.setColorAt(0.3, QColor(electric_blue.red(), electric_blue.green(), electric_blue.blue(), int(opacity * 0.4 * 255)))
-            radial_gradient.setColorAt(0.7, QColor(0, 0, 0, 0))  # Transparent edge
-            radial_gradient.setColorAt(1.0, QColor(0, 0, 0, 0))  # Transparent edge
-            
+
+            crimson = QColor(220, 50, 50)   # vivid red
+            hot = QColor(255, 90, 60)       # hot orange-red
+
+            crimson.setAlphaF(min(opacity, 1.0))
+            hot.setAlphaF(min(opacity * 0.8, 1.0))
+
+            radial_gradient.setColorAt(0.0, QColor(0, 0, 0, 0))
+            radial_gradient.setColorAt(0.55, QColor(0, 0, 0, 0))
+            radial_gradient.setColorAt(0.75, hot)
+            radial_gradient.setColorAt(0.88, crimson)
+            radial_gradient.setColorAt(1.0, QColor(0, 0, 0, 0))
+
             painter.setBrush(QBrush(radial_gradient))
             painter.setPen(Qt.NoPen)
-            
+
             glow_rect = QRectF(center_x - glow_radius, center_y - glow_radius,
-                             glow_radius * 2, glow_radius * 2)
+                               glow_radius * 2, glow_radius * 2)
             painter.drawEllipse(glow_rect)
             
     def _draw_idle_glow(self, painter, center_x, center_y, radius, dpi_factor):

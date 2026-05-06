@@ -52,9 +52,9 @@ class RecordTab(BaseTab):
         circle_h_layout = QHBoxLayout()
         circle_h_layout.setSpacing(0)
         circle_h_layout.setContentsMargins(0, 0, 0, 0)
-        circle_h_layout.addStretch()
-        circle_h_layout.addWidget(self._circle_stack)
-        circle_h_layout.addStretch()
+        circle_h_layout.addStretch(1)
+        circle_h_layout.addWidget(self._circle_stack, 0, Qt.AlignHCenter)
+        circle_h_layout.addStretch(1)
         
         self.main_layout.addLayout(circle_h_layout)
         
