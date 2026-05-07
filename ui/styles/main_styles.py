@@ -147,8 +147,7 @@ class MainStyles:
                     stop:0.7 rgba(29, 33, 41, 0.95), stop:1 rgba(25, 29, 37, 1.0));
                 color: {ColorTokens.TEXT_SECONDARY};
                 padding: 6px 8px;
-                margin-left: 12px;
-                margin-right: 0px;
+                margin: 0px;
                 border-top-left-radius: 8px;
                 border-top-right-radius: 8px;
                 font-family: "Inter","Segoe UI",system-ui,-apple-system;

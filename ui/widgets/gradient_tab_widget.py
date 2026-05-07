@@ -13,9 +13,10 @@ class GradientTabBar(QTabBar):
     
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setDrawBase(False)  # Don't draw the base line
-        self.setElideMode(Qt.ElideNone)  # Disable text elision to prevent truncation
-        self.setUsesScrollButtons(True)  # Allow scrolling if tabs don't fit
+        self.setDrawBase(False)
+        self.setElideMode(Qt.ElideNone)
+        self.setUsesScrollButtons(False)
+        self.setExpanding(True)  # Each tab fills 50% → midpoint = window center
     
     def tabSizeHint(self, index):
         """Override to ensure tabs have enough space for their content"""
