@@ -44,7 +44,8 @@ Name: "quicklaunchicon"; Description: "{cm:CreateQuickLaunchIcon}"; GroupDescrip
 
 [Files]
 ; Main executable
-Source: "dist\Whiz.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "dist\Whiz\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+; Note: hooks/ runtime hook is embedded in the bundle by PyInstaller — no need to ship separately
 
 ; Assets folder
 Source: "assets\*"; DestDir: "{app}\assets"; Flags: ignoreversion recursesubdirs createallsubdirs
@@ -81,15 +82,43 @@ Type: filesandordirs; Name: "{app}\temp"
 
 [Code]
 // Custom code for installer behavior
+
+function IsVCRedistInstalled(): Boolean;
+var
+  installed: Cardinal;
+begin
+  // Check for VS2015-2022 x64 redist (version 14.x)
+  Result := RegQueryDWordValue(
+    HKLM,
+    'SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\x64',
+    'Installed',
+    installed
+  ) and (installed = 1);
+end;
+
 function InitializeSetup(): Boolean;
 begin
   Result := True;
-  
-  // Check if Whiz is already running
+
   if CheckForMutexes('WhizMutex') then
   begin
     if MsgBox('Whiz is currently running. Please close it before continuing.', mbError, MB_OKCANCEL) = IDCANCEL then
+    begin
       Result := False;
+      Exit;
+    end;
+  end;
+
+  if not IsVCRedistInstalled() then
+  begin
+    MsgBox(
+      'The Microsoft Visual C++ Redistributable (x64) is required but was not found.' + #13#10 +
+      'Please download and install it from:' + #13#10 +
+      'https://aka.ms/vs/17/release/vc_redist.x64.exe' + #13#10#13#10 +
+      'Then re-run this installer.',
+      mbError, MB_OK
+    );
+    Result := False;
   end;
 end;
 
