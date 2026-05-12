@@ -527,8 +527,8 @@ class SettingsManager:
                 
                 # Update temperature if it has changed
                 new_temperature = settings.get("whisper/temperature", 0.0)
-                if hasattr(controller, 'temperature') and controller.temperature != new_temperature:
-                    controller.temperature = new_temperature
+                if hasattr(controller, 'set_temperature') and controller.temperature != new_temperature:
+                    controller.set_temperature(new_temperature)
                     logger.info(f"Temperature updated to {new_temperature}")
                 
                 # Update speed mode if it has changed

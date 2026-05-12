@@ -20,9 +20,11 @@
 
 #### Startup
 - `main.py`:
+  - Sets `OMP_NUM_THREADS=1` and `KMP_DUPLICATE_LIB_OK=TRUE`, then imports `ctranslate2` before any PyQt5 module (Windows DLL conflict prevention — see CLAUDE.md Platform notes).
   - Performs single-instance check via `core/single_instance_manager.py`.
   - Initializes logging, `SettingsManager`, `SpeechController`, cleanup management, and the main Qt application.
-  - Creates the main UI (`SpeechApp`/`MainWindow`), wires signals, applies styles, and triggers background model loading.
+  - `SpeechController.__init__()` calls `preload_model()` immediately (eager preload via `QThread`).
+  - Creates the main UI (`SpeechApp`/`MainWindow`), wires signals, and applies styles.
 
 #### Recording & Transcription
 - **Trigger**: Global hotkey (hold or toggle) or UI control in the Record tab.
@@ -30,7 +32,8 @@
   - Hotkey → `HotkeyManager` → `SpeechController`.
   - `SpeechController` instructs `AudioManager` to start/stop recording.
   - Audio stream pushes frames into a thread-safe queue; levels are fed to `WaveformWidget` and indicators.
-  - On stop: audio is written to a sandboxed temp file; Whisper model is loaded/ensured in the background.
+  - On stop: audio is written to a sandboxed temp file via `AudioManager`.
+  - If the model is still loading, audio path is stored in `_queued_audio_path` (depth-1, last-wins); processed automatically once the model is ready.
   - Transcription runs (with retries and exception classification) and results are:
     - Stored as transcripts with timestamps.
     - Sent to UI (record tab + transcripts tab).

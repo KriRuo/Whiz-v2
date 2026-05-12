@@ -236,36 +236,84 @@ class TestRecordingService(unittest.TestCase):
         success = service.start_recording()
         self.assertFalse(success)
     
+    @patch('core.recording_service.create_safe_temp_file')
+    @patch('core.recording_service.AudioManager')
+    def test_error_state_resets_on_next_start_attempt(self, mock_audio_manager_class, mock_create_temp):
+        """Service in ERROR state must reset to IDLE and retry rather than blocking forever."""
+        mock_audio_manager = Mock()
+        mock_audio_manager.is_available.return_value = True
+        mock_audio_manager.start_recording.return_value = True
+        mock_audio_manager_class.return_value = mock_audio_manager
+        mock_create_temp.return_value = "/tmp/test.wav"
+
+        service = RecordingService(self.config)
+        service._set_state(RecordingState.ERROR)
+        self.assertEqual(service.get_state(), RecordingState.ERROR)
+
+        # Should NOT be permanently blocked — must recover
+        success = service.start_recording()
+        self.assertTrue(success, "Recording should succeed after recovering from ERROR state")
+        self.assertEqual(service.get_state(), RecordingState.RECORDING)
+
+    @patch('core.recording_service.AudioManager')
+    def test_error_state_is_not_permanent(self, mock_audio_manager_class):
+        """State set externally to ERROR must not permanently block start_recording."""
+        mock_audio_manager = Mock()
+        mock_audio_manager.is_available.return_value = True
+        mock_audio_manager_class.return_value = mock_audio_manager
+
+        service = RecordingService(self.config)
+
+        # Force ERROR state as would happen after a failed recording attempt
+        service._set_state(RecordingState.ERROR)
+        self.assertEqual(service.get_state(), RecordingState.ERROR)
+
+        # After the fix, start_recording() should reset ERROR → IDLE and proceed
+        # (it will fail at create_safe_temp_file since we haven't patched it, but
+        # the key thing is it passes the ERROR-state gate)
+        try:
+            service.start_recording()
+        except Exception:
+            pass
+        # State should no longer be stuck at ERROR
+        self.assertNotEqual(service.get_state(), RecordingState.ERROR)
+
     @patch('core.recording_service.Path')
     @patch('core.recording_service.create_safe_temp_file')
     @patch('core.recording_service.AudioManager')
     def test_stop_recording_success(self, mock_audio_manager_class, mock_create_temp, mock_path_class):
-        """Test successful recording stop"""
+        """Test successful recording stop — stop_recording() takes no args, save_audio_to_file() writes the WAV."""
         mock_audio_manager = Mock()
         mock_audio_manager.is_available.return_value = True
         mock_audio_manager.start_recording.return_value = True
-        mock_audio_manager.stop_recording.return_value = "/tmp/test_audio.wav"
+        mock_audio_manager.stop_recording.return_value = [b"frame1", b"frame2"]  # raw frames
+        mock_audio_manager.save_audio_to_file.return_value = True
         mock_audio_manager_class.return_value = mock_audio_manager
-        
+
         mock_create_temp.return_value = "/tmp/test_audio.wav"
-        
-        # Mock Path.exists
+
         mock_path_instance = Mock()
         mock_path_instance.exists.return_value = True
         mock_path_class.return_value = mock_path_instance
-        
+
         service = RecordingService(self.config)
         service.start_recording()
-        
-        time.sleep(0.1)  # Small delay to ensure duration > 0
-        
+
+        time.sleep(0.1)
+
         result = service.stop_recording()
-        
+
         self.assertTrue(result.success)
         self.assertEqual(result.audio_path, "/tmp/test_audio.wav")
         self.assertGreater(result.duration_seconds, 0)
         self.assertEqual(service.get_state(), RecordingState.IDLE)
         self.assertFalse(service.is_recording())
+
+        # Verify the correct two-step call: stop() with no args, then save with path
+        mock_audio_manager.stop_recording.assert_called_once_with()
+        mock_audio_manager.save_audio_to_file.assert_called_once_with(
+            [b"frame1", b"frame2"], "/tmp/test_audio.wav"
+        )
     
     @patch('core.recording_service.AudioManager')
     def test_stop_recording_when_not_recording(self, mock_audio_manager_class):
@@ -296,7 +344,7 @@ class TestRecordingService(unittest.TestCase):
         service.cancel_recording()
         
         self.assertEqual(service.get_state(), RecordingState.IDLE)
-        mock_audio_manager.stop_recording.assert_called_with(None)
+        mock_audio_manager.stop_recording.assert_called_with()
     
     @patch('core.recording_service.AudioManager')
     def test_get_recording_duration(self, mock_audio_manager_class):

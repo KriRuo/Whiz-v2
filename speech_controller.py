@@ -123,6 +123,10 @@ class SpeechController:
     def temperature(self) -> float:
         """Get current temperature setting"""
         return self.transcription_service.config.temperature
+
+    @temperature.setter
+    def temperature(self, value: float):
+        self.set_temperature(value)
     
     def _register_cleanup_tasks(self):
         """Register cleanup tasks with the cleanup manager"""
@@ -324,6 +328,7 @@ class SpeechController:
         success = self.recording_service.start_recording()
         if success:
             logger.info("Audio recording started successfully")
+            self._update_status("Recording...")
         else:
             logger.error("Failed to start audio recording")
             self._update_status("Recording failed")

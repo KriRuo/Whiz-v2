@@ -1,208 +1,94 @@
-# Whiz - Voice-to-Text Application
+# Whiz — Voice-to-Text
 
-A powerful PyQt-based voice-to-text application with Whisper integration, featuring robust settings persistence, comprehensive preferences UI, and cross-platform compatibility.
-
-## Download & Install
-
-### Windows
-- [Download Whiz v1.0.0 Installer](https://github.com/KriRuo/Whiz/releases/download/v1.0.0/Whiz-v1.0.0-Windows-Installer.zip) - Recommended for most users
-- [Download Whiz v1.0.0 Standalone](https://github.com/KriRuo/Whiz/releases/download/v1.0.0/Whiz-v1.0.0-Windows-Standalone.exe) - No installation required
-
-### macOS
-- [Download Whiz v1.0.0 DMG](https://github.com/KriRuo/Whiz/releases/download/v1.0.0/Whiz-v1.0.0-macOS.dmg) - Drag to Applications folder
-
-### Linux
-- [Download Whiz v1.0.0 AppImage](https://github.com/KriRuo/Whiz/releases/download/v1.0.0/Whiz-v1.0.0-Linux.AppImage) - Universal Linux package
-
-### System Requirements
-- **Windows**: Windows 10 (1903+) or Windows 11
-- **macOS**: macOS 10.15 (Catalina) or later
-- **Linux**: Ubuntu 20.04+ or equivalent
-- **RAM**: 4GB minimum (8GB recommended)
-- **Storage**: 2GB free space
-- **Audio**: Microphone for voice input
-- **Network**: Internet connection for initial setup
-- **FFmpeg**: Required for audio processing (see installation instructions below)
-
-### Current Status
-- ✅ **Windows v1.0.0**: Released and ready for download
-- ✅ **macOS v1.0.0**: Released and ready for download
-- ✅ **Linux v1.0.0**: Released and ready for download
-- ✅ **Cross-platform**: Full support for all major operating systems
+Hotkey-triggered voice-to-text for Windows. Press a key, speak, release — transcribed text is pasted into whatever app you're using. Powered by [faster-whisper](https://github.com/SYSTRAN/faster-whisper) running locally on CPU (no cloud, no subscription).
 
 ---
 
-## Development Setup
+## Installing (Windows — end users)
 
-This section is for developers who want to run Whiz from source code, contribute to the project, or customize the application.
+> This is the recommended path for colleagues who just want to use the app.
+
+### Requirements
+- Windows 10 (1809+) or Windows 11 — 64-bit
+- Microphone
+- Internet on first launch (downloads the ~150 MB speech model once, then works offline)
+- [Microsoft Visual C++ Redistributable x64](https://aka.ms/vs/17/release/vc_redist.x64.exe) — already installed on most machines; the installer will tell you if it's missing
+
+### Steps
+1. Download `Whiz-Setup-Windows.exe` from the [Releases](https://github.com/KriRuo/Whiz/releases) page
+2. Double-click and follow the installer — no Python required, everything is bundled
+3. Launch Whiz from the Start Menu
+4. On first launch, Whiz downloads the speech model (~150 MB) — wait ~30 seconds, then it's ready
+5. Press **AltGr** (or your configured hotkey) and speak
+
+That's it. No Python, no pip, no FFmpeg to install manually.
+
+---
+
+## Building the installer (developers)
+
+> Follow this if you want to produce a new `Whiz-Setup-Windows.exe`.
 
 ### Prerequisites
+- Python 3.11 (from [python.org](https://python.org) — check "Add to PATH")
+- Git
+- [Inno Setup 6](https://jrsoftware.org/isdl.php) — for the final installer step
+- FFmpeg (optional — run `install_ffmpeg.bat` to install locally into `ffmpeg/`)
 
-- **Python 3.9+** (Python 3.11 recommended for best performance)
-  - Download from [python.org](https://python.org)
-  - Verify: `python --version`
-- **Git** (for cloning the repository)
-- **FFmpeg** (required for audio processing)
-  - Windows: Run `install_ffmpeg.bat` (included in project)
-  - macOS: `brew install ffmpeg`
-  - Linux: `sudo apt install ffmpeg` (Ubuntu/Debian) or equivalent
+### Steps
 
-### Quick Start for Developers
-
-#### 1. Clone the Repository
-
-```bash
+#### 1. Clone and set up
+```powershell
 git clone https://github.com/KriRuo/Whiz.git
 cd Whiz
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
 ```
 
-#### 2. Create Virtual Environment (Recommended)
-
-**Windows (PowerShell):**
+#### 2. Build the app bundle
 ```powershell
-python -m venv whiz_env
-.\whiz_env\Scripts\Activate.ps1
+.\build.ps1
 ```
 
-**macOS/Linux:**
-```bash
-python3 -m venv whiz_env
-source whiz_env/bin/activate
+This installs dependencies (no torch), runs PyInstaller, and produces `dist\Whiz\Whiz.exe` — a self-contained folder with Python and all packages embedded.
+
+#### 3. Build the installer
+```powershell
+iscc installer-windows.iss
 ```
 
-#### 3. Install Dependencies
+Produces `installers\Whiz-Setup-Windows.exe` — the single file to distribute.
 
-```bash
+#### 4. Verify
+- Run `dist\Whiz\Whiz.exe` directly to smoke-test before packaging
+- Install from `installers\Whiz-Setup-Windows.exe` on a machine without Python to confirm everything is self-contained
+
+---
+
+## Running from source (developers)
+
+If you want to run without building an installer:
+
+```powershell
+git clone https://github.com/KriRuo/Whiz.git
+cd Whiz
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
-```
-
-**Important for Windows Developers:**
-The `requirements.txt` includes `pywin32>=306` which is **critical** for:
-- Single instance management (window activation)
-- System tray integration
-- Windows-specific features
-
-If you encounter issues with `pywin32`, install it manually:
-```powershell
-pip install pywin32>=306
-```
-
-#### 4. Install FFmpeg (Windows)
-
-```bash
-.\install_ffmpeg.bat
-```
-
-This installs FFmpeg to the `ffmpeg/` directory in your project.
-
-#### 5. Verify Setup
-
-Run the verification script to ensure everything is configured correctly:
-
-```bash
-python scripts/tools/verify_setup.py
-```
-
-This will check:
-- ✓ Python version compatibility
-- ✓ All required dependencies
-- ✓ Platform-specific packages (e.g., `pywin32` on Windows)
-- ✓ Audio system functionality
-- ✓ FFmpeg availability
-- ✓ Project file structure
-
-#### 6. Run the Application
-
-**Option A: With splash screen (recommended)**
-```bash
-python main_with_splash.py
-```
-
-**Option B: Direct launch**
-```bash
+.\install_ffmpeg.bat          # Optional — FFmpeg for audio codec support
+python scripts/tools/verify_setup.py  # Sanity check
 python main.py
 ```
 
-**Option C: One-click setup and run**
-```bash
-python scripts/tools/setup_and_run.py
-```
+### Troubleshooting
 
-This automatically installs dependencies and launches the app.
-
-### Platform-Specific Notes
-
-#### Windows
-- **`pywin32` is required** for proper window management and system integration
-- **FFmpeg**: Use `install_ffmpeg.bat` for automatic installation
-- **Path setup**: Launch scripts automatically add FFmpeg to PATH
-- **Virtual environment**: Use PowerShell or CMD, not Git Bash
-
-#### macOS
-- Install FFmpeg via Homebrew: `brew install ffmpeg`
-- May require accessibility permissions for global hotkeys
-- Use Python 3.9+ from python.org (not system Python)
-
-#### Linux
-- Install FFmpeg: `sudo apt install ffmpeg` (Ubuntu/Debian)
-- Install PortAudio: `sudo apt install portaudio19-dev`
-- May need to install Qt dependencies: `sudo apt install libxcb-xinerama0`
-- Ensure Python development headers: `sudo apt install python3-dev`
-
-### Troubleshooting Development Setup
-
-#### "win32gui not available" Error (Windows)
-**Cause**: `pywin32` package is not installed  
-**Fix**: 
-```powershell
-pip install pywin32>=306
-```
-
-#### "Single instance check failed" Error
-**Cause**: `pywin32` is missing or not properly installed on Windows  
-**Fix**: Reinstall `pywin32` and restart your IDE:
-```powershell
-pip uninstall pywin32
-pip install pywin32>=306
-```
-
-#### Import Errors or Missing Packages
-**Fix**: Reinstall all dependencies:
-```bash
-pip install -r requirements.txt --force-reinstall
-```
-
-#### FFmpeg Not Found
-**Windows**: Run `install_ffmpeg.bat`  
-**macOS**: `brew install ffmpeg`  
-**Linux**: `sudo apt install ffmpeg`
-
-Verify installation:
-```bash
-ffmpeg -version
-```
-
-#### Audio Device Errors
-- Check your microphone is connected and not in use by other applications
-- On Linux, ensure your user is in the `audio` group
-- Run `python scripts/tools/verify_setup.py` to diagnose audio issues
-
-### Development Tools
-
-#### Verify Setup
-```bash
-python scripts/tools/verify_setup.py
-```
-
-Comprehensive check of your development environment.
-
-#### Run Tests
-```bash
-python -m pytest tests/
-```
-
-#### Build for Distribution
-See `scripts/build/` for platform-specific build scripts.
+| Error | Fix |
+|---|---|
+| `win32gui not available` | `pip install pywin32>=306` |
+| `Single instance check failed` | `pip uninstall pywin32 && pip install pywin32>=306`, then restart IDE |
+| `ffmpeg not found` | Run `install_ffmpeg.bat` or `pip install` will not fix this — FFmpeg is a separate binary |
+| Missing packages | `pip install -r requirements.txt --force-reinstall` |
+| Audio device not found | Check microphone in Windows Sound settings |
 
 ---
 
@@ -422,17 +308,18 @@ python main.py
 
 ### Dependencies
 
-```txt
-PyQt5==5.15.10
-openai-whisper>=20231117
-faster-whisper>=1.0.3  # Default engine for 5-10x faster transcription
-sounddevice>=0.4.7
-pynput>=1.7.7
-pyautogui>=0.9.54
-numpy>=1.24.0,<2.0  # Compatible with PyTorch
-psutil>=5.9.8
-torch>=2.0.0,<2.2.0  # CPU-only version for compatibility
-```
+See [`requirements.txt`](requirements.txt) for the full list. Key packages:
+
+| Package | Purpose |
+|---|---|
+| `PyQt5` | GUI framework |
+| `faster-whisper` | Speech-to-text engine (CPU, no GPU required) |
+| `sounddevice` | Audio capture |
+| `pynput` | Global hotkey |
+| `pyautogui` | Auto-paste |
+| `pywin32` | Windows integration (tray, single-instance) |
+
+`torch` is **not required** — the app transcribes on CPU via `ctranslate2` (a dependency of `faster-whisper`).
 
 ## Testing
 

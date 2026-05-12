@@ -137,3 +137,4 @@ dist/
 installers/*.exe
 installers/*.zip
 
+.claude/

@@ -215,7 +215,6 @@ def check_project_structure():
     
     critical_files = [
         "main.py",
-        "main_with_splash.py",
         "speech_controller.py",
         "speech_ui.py",
         "requirements.txt",
@@ -249,7 +248,7 @@ def print_summary(results):
         print("\nYou can now run Whiz with:")
         print("  python main.py")
         print("  or")
-        print("  python main_with_splash.py")
+        print("  python main.py  (or double-click run_whiz.bat)")
     else:
         print("\n✗ SOME CHECKS FAILED - Please fix the issues above")
         print("\nCommon fixes:")

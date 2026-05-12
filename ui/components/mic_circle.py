@@ -4,7 +4,7 @@ Custom QWidget with soft neon glow aura and pulsing effects.
 """
 
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QLabel, QApplication
-from PyQt5.QtCore import Qt, QTimer, QPropertyAnimation, pyqtProperty, QRectF, QEasingCurve
+from PyQt5.QtCore import Qt, QTimer, QPropertyAnimation, pyqtProperty, QRectF, QEasingCurve, pyqtSignal
 from PyQt5.QtGui import QPainter, QPen, QBrush, QRadialGradient, QConicalGradient, QLinearGradient, QColor, QFont
 from PyQt5.QtSvg import QSvgRenderer
 from ui.layout_system import DPIScalingHelper, ResponsiveBreakpoints, ScreenSizeClass, AnimationTokens
@@ -12,10 +12,16 @@ from ui.layout_system import DPIScalingHelper, ResponsiveBreakpoints, ScreenSize
 
 class AnimationCircleWidget(QWidget):
     """Animated circle with soft neon glow aura and pulsing effects."""
-    
+
+    clicked = pyqtSignal()
+
     def __init__(self, parent=None):
         super().__init__(parent)
-        
+
+        self._is_hover = False
+        self._is_pressed = False
+        self.setCursor(Qt.PointingHandCursor)
+
         # Animation properties
         self._pulse_opacity = 0.3
         self._idle_pulse_opacity = 0.2  # Updated to match new animation range (0.15-0.25)
@@ -30,8 +36,8 @@ class AnimationCircleWidget(QWidget):
         self._is_processing = False
         
         # Set responsive sizing instead of fixed size
-        self._base_size = 240  # Base size for calculations
-        self._glow_margin = 80  # Extra margin for glow effects
+        self._base_size = 216  # Base size for calculations
+        self._glow_margin = 20  # Extra margin for glow effects
         
         # Set size policy for responsive behavior
         # Use Fixed for both dimensions to maintain square aspect ratio and proper centering
@@ -43,7 +49,7 @@ class AnimationCircleWidget(QWidget):
             self._update_responsive_size()
         except Exception:
             # Fallback to fixed size if responsive sizing fails during startup
-            self.setFixedSize(320, 320)
+            self.setFixedSize(270, 270)
         
         # Initialize animations
         self._init_animations()
@@ -79,7 +85,7 @@ class AnimationCircleWidget(QWidget):
         app = QApplication.instance()
         if app is None:
             # Fallback to fixed size if app not ready
-            self.setFixedSize(320, 320)
+            self.setFixedSize(270, 270)
             return
         
         try:
@@ -106,7 +112,7 @@ class AnimationCircleWidget(QWidget):
             self.setFixedSize(total_size, total_size)
         except Exception:
             # Fallback to fixed size if any error occurs
-            self.setFixedSize(320, 320)
+            self.setFixedSize(270, 270)
     
     def sizeHint(self):
         """Provide size hint for layout system."""
@@ -150,6 +156,29 @@ class AnimationCircleWidget(QWidget):
             from PyQt5.QtCore import QSize
             return QSize(200, 200)
     
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            self._is_pressed = True
+            self.update()
+
+    def mouseReleaseEvent(self, event):
+        if event.button() == Qt.LeftButton and self._is_pressed:
+            self._is_pressed = False
+            if self.rect().contains(event.pos()):
+                self.clicked.emit()
+            self.update()
+
+    def enterEvent(self, event):
+        self._is_hover = True
+        self.update()
+        super().enterEvent(event)
+
+    def leaveEvent(self, event):
+        self._is_hover = False
+        self._is_pressed = False
+        self.update()
+        super().leaveEvent(event)
+
     def resizeEvent(self, event):
         """Handle resize events to maintain aspect ratio and update calculations."""
         super().resizeEvent(event)
@@ -348,7 +377,11 @@ class AnimationCircleWidget(QWidget):
         
         # Draw microphone icon
         self._draw_microphone_icon(painter, center_x, center_y, radius, dpi_factor)
-        
+
+        # Hover/press highlight ring
+        if self._is_hover:
+            self._draw_hover_ring(painter, center_x, center_y, radius, dpi_factor)
+
         # Draw enhanced pulse glow if recording
         if self._is_recording:
             self._draw_recording_glow(painter, center_x, center_y, radius, dpi_factor)
@@ -358,26 +391,26 @@ class AnimationCircleWidget(QWidget):
         # Create multiple layers of soft glow for realistic neon effect - MORE SUBTLE
         # Scale glow distances based on radius (responsive)
         glow_layers = [
-            (radius + int(radius * 0.2), 0.50),  # Outer soft glow - MORE SUBTLE
-            (radius + int(radius * 0.15), 0.60),  # Mid glow - MORE SUBTLE
-            (radius + int(radius * 0.1), 0.70),  # Inner glow - MORE SUBTLE
+            (radius + int(radius * 0.2), 0.80),  # Outer soft glow
+            (radius + int(radius * 0.15), 0.90),  # Mid glow
+            (radius + int(radius * 0.1), 1.00),  # Inner glow
         ]
-        
+
         for glow_radius, opacity in glow_layers:
             # Create conical gradient for rotating color effect
             conical_gradient = QConicalGradient(center_x, center_y, self._rotation_angle * 0.2)  # Very slow rotation
-            
+
             # Define dark blue Tron-like color palette
             dark_blue = QColor(0, 50, 100)      # Deep dark blue
             electric_blue = QColor(0, 100, 200) # Electric blue
             neon_blue = QColor(0, 150, 255)     # Neon blue
             cyan_blue = QColor(0, 200, 255)     # Cyan blue
-            
-            # Apply reduced opacity for subtle effect
-            dark_blue.setAlphaF(opacity * 0.4)
-            electric_blue.setAlphaF(opacity * 0.35)
-            neon_blue.setAlphaF(opacity * 0.3)
-            cyan_blue.setAlphaF(opacity * 0.35)
+
+            # Apply opacity for bright neon effect
+            dark_blue.setAlphaF(opacity * 0.6)
+            electric_blue.setAlphaF(opacity * 0.55)
+            neon_blue.setAlphaF(opacity * 0.5)
+            cyan_blue.setAlphaF(opacity * 0.55)
             
             # Create smooth color transitions
             conical_gradient.setColorAt(0.0, dark_blue)
@@ -521,9 +554,9 @@ class AnimationCircleWidget(QWidget):
         """Draw a dark blue Tron-like glow layer around the entire circle."""
         # Create multiple layers of dark blue glow with slow rotation - MORE SUBTLE
         glow_layers = [
-            (radius + 35, 0.40),  # Inner prominent glow - MORE SUBTLE
-            (radius + 55, 0.25),  # Mid subtle glow - MORE SUBTLE
-            (radius + 55, 0.60),  # Outer glow - MORE SUBTLE
+            (radius + 35, 0.75),  # Inner prominent glow
+            (radius + 55, 0.50),  # Mid glow
+            (radius + 55, 0.90),  # Outer glow
         ]
         
         for glow_radius, opacity in glow_layers:
@@ -637,35 +670,30 @@ class AnimationCircleWidget(QWidget):
             painter.drawEllipse(glow_rect)
         
     def _draw_recording_glow(self, painter, center_x, center_y, radius, dpi_factor):
-        """Draw subtle dark blue pulse glow when recording (less dramatic)."""
-        # Create subtle pulsing glow layers
-        pulse_intensity = self._pulse_opacity
-        
+        """Draw bright red pulsing glow when recording — clearly distinct from idle."""
+        pulse_intensity = self._pulse_opacity  # 0.15–0.45 animated range
+
         glow_layers = [
-            (radius + 25, pulse_intensity * 0.2),  # Outer pulse (reduced)
-            (radius + 15, pulse_intensity * 0.3),  # Mid pulse (reduced)
-            (radius + 8, pulse_intensity * 0.4),   # Inner pulse (reduced)
+            (radius + int(radius * 0.18), pulse_intensity * 0.7),  # Outer ring
+            (radius + int(radius * 0.10), pulse_intensity * 0.9),  # Inner ring
         ]
-        
+
         for glow_radius, opacity in glow_layers:
-            # Create radial gradient for soft glow
             radial_gradient = QRadialGradient(center_x, center_y, glow_radius)
-            
-            # Use subtle electric blue color for recording state
-            electric_blue = QColor(0, 100, 200)  # Electric blue
-            electric_blue.setAlphaF(opacity * 0.5)  # Much more subtle
-            
-            # Create soft falloff
-            radial_gradient.setColorAt(0.0, electric_blue)
-            radial_gradient.setColorAt(0.3, QColor(electric_blue.red(), electric_blue.green(), electric_blue.blue(), int(opacity * 0.4 * 255)))
-            radial_gradient.setColorAt(0.7, QColor(0, 0, 0, 0))  # Transparent edge
-            radial_gradient.setColorAt(1.0, QColor(0, 0, 0, 0))  # Transparent edge
-            
+
+            crimson = QColor(210, 60, 60)   # muted red
+            crimson.setAlphaF(min(opacity, 1.0))
+
+            radial_gradient.setColorAt(0.0, QColor(0, 0, 0, 0))
+            radial_gradient.setColorAt(0.65, QColor(0, 0, 0, 0))
+            radial_gradient.setColorAt(0.82, crimson)
+            radial_gradient.setColorAt(1.0, QColor(0, 0, 0, 0))
+
             painter.setBrush(QBrush(radial_gradient))
             painter.setPen(Qt.NoPen)
-            
+
             glow_rect = QRectF(center_x - glow_radius, center_y - glow_radius,
-                             glow_radius * 2, glow_radius * 2)
+                               glow_radius * 2, glow_radius * 2)
             painter.drawEllipse(glow_rect)
             
     def _draw_idle_glow(self, painter, center_x, center_y, radius, dpi_factor):
@@ -864,6 +892,17 @@ class AnimationCircleWidget(QWidget):
             # Draw rounded rectangle for each bar
             painter.drawRoundedRect(int(bar_x), int(bar_y), int(bar_width), int(height), corner_radius, corner_radius)
         
+    def _draw_hover_ring(self, painter, center_x, center_y, radius, dpi_factor):
+        """Draw a subtle highlight ring on hover/press to signal interactivity."""
+        ring_radius = radius + 4
+        alpha = 200 if self._is_pressed else 110
+        color = QColor(0, 212, 255, alpha)
+        pen_width = 2.0 if self._is_pressed else 1.5
+        painter.setPen(QPen(color, pen_width))
+        painter.setBrush(Qt.NoBrush)
+        painter.drawEllipse(QRectF(center_x - ring_radius, center_y - ring_radius,
+                                   ring_radius * 2, ring_radius * 2))
+
     def _draw_neon_ring_animation(self, painter, center_x, center_y, radius, dpi_factor):
         """Draw dark blue Tron-like neon ring animation."""
         # Create rotating neon ring effect with dark blue colors
